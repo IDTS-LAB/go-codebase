@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/joho/godotenv"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
@@ -15,24 +16,37 @@ import (
 
 var Module = fx.Module("config", fx.Provide(New))
 
+// Config is the root configuration struct, grouped by usage.
 type Config struct {
-	Server    ServerConfig
-	Database  DatabaseConfig
-	Redis     RedisConfig
-	NATS      NATSConfig
-	JWT       JWTConfig
-	Log       LogConfig
-	Telemetry TelemetryConfig
-	Asynq     AsynqConfig
+	App         AppConfig
+	Server      ServerConfig
+	Database    DatabaseConfig
+	Redis       RedisConfig
+	NATS        NATSConfig
+	Auth        AuthConfig
+	RateLimit   RateLimitConfig
+	CORS        CORSConfig
+	Idempotency IdempotencyConfig
+	Log         LogConfig
+	Telemetry   TelemetryConfig
+	Asynq       AsynqConfig
 }
 
+// AppConfig holds application-level settings.
+type AppConfig struct {
+	Env string
+}
+
+// ServerConfig holds HTTP server settings.
 type ServerConfig struct {
-	Port         int
-	ReadTimeout  int
-	WriteTimeout int
-	IdleTimeout  int
+	Port               int
+	ReadTimeout        int
+	WriteTimeout       int
+	IdleTimeout        int
+	MaxRequestBodySize int
 }
 
+// DatabaseConfig holds PostgreSQL connection settings.
 type DatabaseConfig struct {
 	Host            string
 	Port            int
@@ -45,6 +59,7 @@ type DatabaseConfig struct {
 	ConnMaxLifetime int
 }
 
+// RedisConfig holds Redis connection settings.
 type RedisConfig struct {
 	Addr     string
 	Password string
@@ -52,31 +67,62 @@ type RedisConfig struct {
 	PoolSize int
 }
 
+// NATSConfig holds NATS connection settings.
 type NATSConfig struct {
 	URL string
 }
 
-type JWTConfig struct {
-	Secret     string
-	Expiration int
+// AuthConfig holds authentication and security settings.
+type AuthConfig struct {
+	JWTSecret         string
+	JWTExpiration     int
+	MaxLoginAttempts  int
+	LockoutDuration   int
+	TokenDenylist     bool
 }
 
+// RateLimitConfig holds rate limiting settings.
+type RateLimitConfig struct {
+	Requests int
+	Window   int
+}
+
+// CORSConfig holds CORS settings.
+type CORSConfig struct {
+	AllowedOrigins   []string
+	AllowedMethods   []string
+	AllowedHeaders   []string
+	AllowCredentials bool
+	MaxAge           int
+}
+
+// IdempotencyConfig holds idempotency settings.
+type IdempotencyConfig struct {
+	Enabled bool
+	TTL     int
+}
+
+// LogConfig holds logging settings.
 type LogConfig struct {
 	Level  string
 	Format string
 }
 
+// TelemetryConfig holds OpenTelemetry settings.
 type TelemetryConfig struct {
 	ServiceName      string
 	ExporterEndpoint string
 	SampleRate       float64
 }
 
+// AsynqConfig holds background job settings.
 type AsynqConfig struct {
 	RedisAddr string
 }
 
 func New() (*Config, error) {
+	_ = godotenv.Load()
+
 	k := koanf.New(".")
 
 	if err := k.Load(file.Provider("configs/config.yaml"), yaml.Parser()); err != nil {
@@ -93,10 +139,39 @@ func New() (*Config, error) {
 	}
 
 	applyEnvOverrides(cfg)
+	setDefaults(cfg)
 
+	if cfg.App.Env == "production" && cfg.Auth.JWTSecret == "your-secret-key-change-in-production" {
+		return nil, fmt.Errorf("JWT_SECRET must be changed in production")
+	}
+
+	return cfg, nil
+}
+
+func setDefaults(cfg *Config) {
+	// App
+	if cfg.App.Env == "" {
+		cfg.App.Env = "development"
+	}
+
+	// Server
 	if cfg.Server.Port == 0 {
 		cfg.Server.Port = 8080
 	}
+	if cfg.Server.ReadTimeout == 0 {
+		cfg.Server.ReadTimeout = 30
+	}
+	if cfg.Server.WriteTimeout == 0 {
+		cfg.Server.WriteTimeout = 30
+	}
+	if cfg.Server.IdleTimeout == 0 {
+		cfg.Server.IdleTimeout = 120
+	}
+	if cfg.Server.MaxRequestBodySize == 0 {
+		cfg.Server.MaxRequestBodySize = 10 * 1024 * 1024
+	}
+
+	// Database
 	if cfg.Database.Port == 0 {
 		cfg.Database.Port = 5432
 	}
@@ -109,22 +184,86 @@ func New() (*Config, error) {
 	if cfg.Database.ConnMaxLifetime == 0 {
 		cfg.Database.ConnMaxLifetime = 300
 	}
-	if cfg.JWT.Expiration == 0 {
-		cfg.JWT.Expiration = 3600
+
+	// Auth
+	if cfg.Auth.JWTExpiration == 0 {
+		cfg.Auth.JWTExpiration = 3600
 	}
+	if cfg.Auth.MaxLoginAttempts == 0 {
+		cfg.Auth.MaxLoginAttempts = 5
+	}
+	if cfg.Auth.LockoutDuration == 0 {
+		cfg.Auth.LockoutDuration = 900
+	}
+	cfg.Auth.TokenDenylist = true
+
+	// Rate Limit
+	if cfg.RateLimit.Requests == 0 {
+		cfg.RateLimit.Requests = 100
+	}
+	if cfg.RateLimit.Window == 0 {
+		cfg.RateLimit.Window = 60
+	}
+
+	// CORS
+	if cfg.CORS.AllowedOrigins == nil {
+		cfg.CORS.AllowedOrigins = []string{"*"}
+	}
+	if cfg.CORS.AllowedMethods == nil {
+		cfg.CORS.AllowedMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+	}
+	if cfg.CORS.AllowedHeaders == nil {
+		cfg.CORS.AllowedHeaders = []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"}
+	}
+	if cfg.CORS.MaxAge == 0 {
+		cfg.CORS.MaxAge = 300
+	}
+
+	// Idempotency
+	if cfg.Idempotency.TTL == 0 {
+		cfg.Idempotency.TTL = 86400
+	}
+
+	// Telemetry
 	if cfg.Telemetry.SampleRate == 0 {
 		cfg.Telemetry.SampleRate = 1.0
 	}
-
-	return cfg, nil
 }
 
 func applyEnvOverrides(cfg *Config) {
+	// App
+	if v := os.Getenv("APP_ENV"); v != "" {
+		cfg.App.Env = v
+	}
+
+	// Server
 	if v := os.Getenv("SERVER_PORT"); v != "" {
 		if port, err := strconv.Atoi(v); err == nil {
 			cfg.Server.Port = port
 		}
 	}
+	if v := os.Getenv("SERVER_READ_TIMEOUT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Server.ReadTimeout = n
+		}
+	}
+	if v := os.Getenv("SERVER_WRITE_TIMEOUT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Server.WriteTimeout = n
+		}
+	}
+	if v := os.Getenv("SERVER_IDLE_TIMEOUT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Server.IdleTimeout = n
+		}
+	}
+	if v := os.Getenv("MAX_REQUEST_BODY_SIZE"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			cfg.Server.MaxRequestBodySize = int(n)
+		}
+	}
+
+	// Database
 	if v := os.Getenv("DB_HOST"); v != "" {
 		cfg.Database.Host = v
 	}
@@ -145,19 +284,121 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("DB_SSLMODE"); v != "" {
 		cfg.Database.SSLMode = v
 	}
+	if v := os.Getenv("DB_MAX_OPEN_CONNS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Database.MaxOpenConns = n
+		}
+	}
+	if v := os.Getenv("DB_MAX_IDLE_CONNS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Database.MaxIdleConns = n
+		}
+	}
+	if v := os.Getenv("DB_CONN_MAX_LIFETIME"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Database.ConnMaxLifetime = n
+		}
+	}
+
+	// Redis
 	if v := os.Getenv("REDIS_ADDR"); v != "" {
 		cfg.Redis.Addr = v
 	}
+	if v := os.Getenv("REDIS_PASSWORD"); v != "" {
+		cfg.Redis.Password = v
+	}
+	if v := os.Getenv("REDIS_DB"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Redis.DB = n
+		}
+	}
+	if v := os.Getenv("REDIS_POOL_SIZE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Redis.PoolSize = n
+		}
+	}
+
+	// NATS
 	if v := os.Getenv("NATS_URL"); v != "" {
 		cfg.NATS.URL = v
 	}
+
+	// Auth
 	if v := os.Getenv("JWT_SECRET"); v != "" {
-		cfg.JWT.Secret = v
+		cfg.Auth.JWTSecret = v
+	}
+	if v := os.Getenv("JWT_EXPIRATION"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Auth.JWTExpiration = n
+		}
+	}
+	if v := os.Getenv("MAX_LOGIN_ATTEMPTS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Auth.MaxLoginAttempts = n
+		}
+	}
+	if v := os.Getenv("LOCKOUT_DURATION"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Auth.LockoutDuration = n
+		}
+	}
+	if v := os.Getenv("TOKEN_DENYLIST"); v != "" {
+		cfg.Auth.TokenDenylist = v == "true" || v == "1"
+	}
+
+	// CORS
+	if v := os.Getenv("CORS_ORIGINS"); v != "" {
+		cfg.CORS.AllowedOrigins = strings.Split(v, ",")
+	}
+	if v := os.Getenv("CORS_ALLOW_CREDENTIALS"); v != "" {
+		cfg.CORS.AllowCredentials = v == "true" || v == "1"
+	}
+	if v := os.Getenv("CORS_MAX_AGE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.CORS.MaxAge = n
+		}
+	}
+
+	// Rate Limit
+	if v := os.Getenv("RATE_LIMIT_REQUESTS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.RateLimit.Requests = n
+		}
+	}
+	if v := os.Getenv("RATE_LIMIT_WINDOW"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.RateLimit.Window = n
+		}
+	}
+
+	// Idempotency
+	if v := os.Getenv("IDEMPOTENCY_ENABLED"); v != "" {
+		cfg.Idempotency.Enabled = v == "true" || v == "1"
+	}
+	if v := os.Getenv("IDEMPOTENCY_TTL"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Idempotency.TTL = n
+		}
+	}
+
+	// Logging
+	if v := os.Getenv("LOG_LEVEL"); v != "" {
+		cfg.Log.Level = v
+	}
+	if v := os.Getenv("LOG_FORMAT"); v != "" {
+		cfg.Log.Format = v
+	}
+
+	// Telemetry
+	if v := os.Getenv("OTEL_SERVICE_NAME"); v != "" {
+		cfg.Telemetry.ServiceName = v
 	}
 	if v := os.Getenv("OTEL_EXPORTER_ENDPOINT"); v != "" {
 		cfg.Telemetry.ExporterEndpoint = v
 	}
-	if v := os.Getenv("LOG_LEVEL"); v != "" {
-		cfg.Log.Level = v
+	if v := os.Getenv("OTEL_SAMPLE_RATE"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.Telemetry.SampleRate = f
+		}
 	}
 }

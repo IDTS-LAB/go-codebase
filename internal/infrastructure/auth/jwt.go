@@ -20,8 +20,8 @@ type JWTTokenService struct {
 
 func NewJWTTokenService(cfg *config.Config) domain.TokenService {
 	return &JWTTokenService{
-		secret:     cfg.JWT.Secret,
-		expiration: time.Duration(cfg.JWT.Expiration) * time.Second,
+		secret:     cfg.Auth.JWTSecret,
+		expiration: time.Duration(cfg.Auth.JWTExpiration) * time.Second,
 	}
 }
 
@@ -74,5 +74,6 @@ func (s *JWTTokenService) ValidateToken(tokenString string) (*domain.TokenClaims
 		UserID: claims.UserID,
 		Email:  claims.Email,
 		Role:   claims.Role,
+		JTI:    claims.ID,
 	}, nil
 }

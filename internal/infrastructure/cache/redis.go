@@ -11,25 +11,29 @@ import (
 	"go.uber.org/fx"
 )
 
-var Module = fx.Module("redis", fx.Provide(NewRedisCache))
+var Module = fx.Module("redis",
+	fx.Provide(NewRedisCache),
+	fx.Provide(NewRedisClient),
+)
 
 type RedisCache struct {
 	client *redis.Client
 }
 
-func NewRedisCache(cfg *config.Config) (domain.Cache, error) {
-	client := redis.NewClient(&redis.Options{
+func NewRedisClient(cfg *config.Config) *redis.Client {
+	return redis.NewClient(&redis.Options{
 		Addr:     cfg.Redis.Addr,
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
 		PoolSize: cfg.Redis.PoolSize,
 	})
+}
 
+func NewRedisCache(client *redis.Client) (domain.Cache, error) {
 	ctx := context.Background()
 	if err := client.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("connect redis: %w", err)
 	}
-
 	return &RedisCache{client: client}, nil
 }
 

@@ -21,14 +21,18 @@ var (
 	ErrUserNotFound        = errors.New("user not found")
 	ErrInvalidRefreshToken = errors.New("invalid or expired refresh token")
 	ErrAccountDisabled     = errors.New("account is disabled")
+	ErrAccountLocked       = errors.New("account is temporarily locked")
 )
 
 type AuthenticationService struct {
-	userRepo       repository.UserRepository
-	refreshRepo    repository.RefreshTokenRepository
-	tokenService   domain.TokenService
-	accessTokenTTL  time.Duration
-	refreshTokenTTL time.Duration
+	userRepo         repository.UserRepository
+	refreshRepo      repository.RefreshTokenRepository
+	tokenService     domain.TokenService
+	denylist         func(ctx context.Context, jti string, ttl time.Duration) error
+	accessTokenTTL   time.Duration
+	refreshTokenTTL  time.Duration
+	maxLoginAttempts int
+	lockoutDuration  time.Duration
 }
 
 func NewAuthenticationService(
@@ -37,12 +41,23 @@ func NewAuthenticationService(
 	tokenService domain.TokenService,
 ) *AuthenticationService {
 	return &AuthenticationService{
-		userRepo:        userRepo,
-		refreshRepo:     refreshRepo,
-		tokenService:    tokenService,
-		accessTokenTTL:  15 * time.Minute,
-		refreshTokenTTL: 7 * 24 * time.Hour,
+		userRepo:         userRepo,
+		refreshRepo:      refreshRepo,
+		tokenService:     tokenService,
+		accessTokenTTL:   15 * time.Minute,
+		refreshTokenTTL:  7 * 24 * time.Hour,
+		maxLoginAttempts: 5,
+		lockoutDuration:  15 * time.Minute,
 	}
+}
+
+func (s *AuthenticationService) SetDenylist(fn func(ctx context.Context, jti string, ttl time.Duration) error) {
+	s.denylist = fn
+}
+
+func (s *AuthenticationService) SetLockoutConfig(maxAttempts int, lockoutDuration time.Duration) {
+	s.maxLoginAttempts = maxAttempts
+	s.lockoutDuration = lockoutDuration
 }
 
 func (s *AuthenticationService) Register(ctx context.Context, email, password, name string) (*entity.User, error) {
@@ -74,9 +89,21 @@ func (s *AuthenticationService) Login(ctx context.Context, email, password strin
 		return nil, ErrAccountDisabled
 	}
 
+	if user.IsLocked() {
+		return nil, ErrAccountLocked
+	}
+
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		user.FailedLoginAttempts++
+		if user.FailedLoginAttempts >= s.maxLoginAttempts {
+			user.Lock(s.lockoutDuration)
+		}
+		_ = s.userRepo.Update(ctx, user)
 		return nil, ErrInvalidCredentials
 	}
+
+	user.Unlock()
+	_ = s.userRepo.Update(ctx, user)
 
 	return user, nil
 }
@@ -130,7 +157,10 @@ func (s *AuthenticationService) RefreshToken(ctx context.Context, refreshTokenSt
 	return s.GenerateTokens(ctx, user)
 }
 
-func (s *AuthenticationService) Logout(ctx context.Context, refreshTokenStr string) error {
+func (s *AuthenticationService) Logout(ctx context.Context, refreshTokenStr string, accessTokenJTI string, accessTokenTTL time.Duration) error {
+	if s.denylist != nil && accessTokenJTI != "" {
+		_ = s.denylist(ctx, accessTokenJTI, accessTokenTTL)
+	}
 	return s.refreshRepo.Revoke(ctx, refreshTokenStr)
 }
 

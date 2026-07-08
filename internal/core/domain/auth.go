@@ -9,4 +9,5 @@ type TokenClaims struct {
 	UserID string
 	Email  string
 	Role   string
+	JTI    string
 }

@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/application/dto"
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/application/service"
@@ -94,6 +95,8 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			utils.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid email or password")
 		case service.ErrAccountDisabled:
 			utils.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "account is disabled")
+		case service.ErrAccountLocked:
+			utils.RespondError(w, http.StatusForbidden, "ACCOUNT_LOCKED", "account is temporarily locked due to too many failed attempts")
 		default:
 			utils.RespondInternalError(w, "failed to login")
 		}
@@ -167,7 +170,11 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid request body")
 		return
 	}
-	if err := h.svc.Logout(r.Context(), req.RefreshToken); err != nil {
+	accessTokenJTI := ""
+	if jti := r.Context().Value("access_token_jti"); jti != nil {
+		accessTokenJTI, _ = jti.(string)
+	}
+	if err := h.svc.Logout(r.Context(), req.RefreshToken, accessTokenJTI, 15*time.Minute); err != nil {
 		utils.RespondInternalError(w, "failed to logout")
 		return
 	}
