@@ -1,0 +1,12 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "internal/todo/infrastructure/persistence/queries.sql"
+    schema: "migrations"
+    gen:
+      go:
+        package: "sqlc"
+        out: "internal/todo/infrastructure/persistence/sqlc"
+        sql_package: "database/sql"
+        emit_json_tags: true
+        emit_empty_slices: true
