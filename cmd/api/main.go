@@ -18,6 +18,7 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/auth"
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/cache"
+	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/email"
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/logger"
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/messaging"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/auditlog"
@@ -65,6 +66,7 @@ func main() {
 		database.Module,
 		telemetry.Module,
 		validator.Module,
+		email.Module,
 
 		// Modules
 		authentication.Module,
