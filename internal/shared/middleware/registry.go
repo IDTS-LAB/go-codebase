@@ -20,6 +20,7 @@ type Registry struct {
 	RateLimit     func(http.Handler) http.Handler
 	Idempotency   func(http.Handler) http.Handler
 	MaxBodySize   func(http.Handler) http.Handler
+	Authorizer    Authorizer
 }
 
 func NewRegistry(
@@ -28,6 +29,7 @@ func NewRegistry(
 	cfg *config.Config,
 	log domain.Logger,
 	errorRepo *auditlog.Repository,
+	authorizer Authorizer,
 ) Registry {
 	auth := Authentication(tokenSvc)
 	if cfg.Auth.TokenDenylist {
@@ -45,5 +47,6 @@ func NewRegistry(
 		RateLimit:     RateLimit(rdb, cfg.RateLimit.Requests, time.Duration(cfg.RateLimit.Window)*time.Second),
 		Idempotency:   Idempotency(rdb, time.Duration(cfg.Idempotency.TTL)*time.Second),
 		MaxBodySize:   MaxBodySize(int64(cfg.Server.MaxRequestBodySize)),
+		Authorizer:    authorizer,
 	}
 }

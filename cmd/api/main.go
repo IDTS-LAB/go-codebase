@@ -13,6 +13,7 @@ import (
 	authHTTP "github.com/IDTS-LAB/go-codebase/internal/authentication/interfaces/http"
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/application/service"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization"
+	"github.com/IDTS-LAB/go-codebase/internal/authorization/infrastructure/casbin"
 	authzHTTP "github.com/IDTS-LAB/go-codebase/internal/authorization/interfaces/http"
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/auth"
@@ -46,6 +47,7 @@ func main() {
 		todoHandler  *todoHTTP.Handler
 		authzHandler *authzHTTP.Handler
 		userHandler  *userHTTP.Handler
+		enforcer     *casbin.Enforcer
 		log          domain.Logger
 		rdb          *redis.Client
 		tokenSvc     domain.TokenService
@@ -88,6 +90,7 @@ func main() {
 		fx.Populate(&todoHandler),
 		fx.Populate(&authzHandler),
 		fx.Populate(&userHandler),
+		fx.Populate(&enforcer),
 		fx.Populate(&log),
 		fx.Populate(&rdb),
 		fx.Populate(&tokenSvc),
@@ -102,13 +105,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	mw := middleware.NewRegistry(tokenSvc, rdb, cfg, log, errorRepo)
+	mw := middleware.NewRegistry(tokenSvc, rdb, cfg, log, errorRepo, enforcer)
 
 	root := router.NewRouter(router.Handlers{
 		Auth:  authHTTP.NewRouter(authHandler, mw.Auth),
-		Todo:  todoHTTP.NewRouter(todoHandler),
-		Authz: authzHTTP.NewRouter(authzHandler, mw.Auth),
-		User:  userHTTP.NewRouter(userHandler, mw.Auth),
+		Todo:  todoHTTP.NewRouter(todoHandler, mw.Auth, enforcer),
+		Authz: authzHTTP.NewRouter(authzHandler, mw.Auth, enforcer),
+		User:  userHTTP.NewRouter(userHandler, mw.Auth, enforcer),
 	}, mw, log, cfg)
 
 	srv := &http.Server{
