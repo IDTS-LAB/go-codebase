@@ -23,6 +23,10 @@ var (
 	ErrAccountDisabled     = errors.New("account is disabled")
 	ErrAccountLocked       = errors.New("account is temporarily locked")
 	ErrEmailNotVerified    = errors.New("email not verified")
+	ErrInvalidVerifyToken  = errors.New("invalid or expired verification token")
+	ErrVerifyTokenExpired  = errors.New("verification token expired")
+	ErrInvalidResetToken   = errors.New("invalid or expired reset token")
+	ErrResetTokenExpired   = errors.New("reset token expired")
 )
 
 type AuthenticationService struct {
@@ -30,7 +34,6 @@ type AuthenticationService struct {
 	refreshRepo      repository.RefreshTokenRepository
 	tokenService     domain.TokenService
 	mailer           domain.Emailer
-	frontendURL      string
 	denylist         func(ctx context.Context, jti string, ttl time.Duration) error
 	accessTokenTTL   time.Duration
 	refreshTokenTTL  time.Duration
@@ -43,14 +46,12 @@ func NewAuthenticationService(
 	refreshRepo repository.RefreshTokenRepository,
 	tokenService domain.TokenService,
 	mailer domain.Emailer,
-	frontendURL string,
 ) *AuthenticationService {
 	return &AuthenticationService{
 		userRepo:         userRepo,
 		refreshRepo:      refreshRepo,
 		tokenService:     tokenService,
 		mailer:           mailer,
-		frontendURL:      frontendURL,
 		accessTokenTTL:   15 * time.Minute,
 		refreshTokenTTL:  7 * 24 * time.Hour,
 		maxLoginAttempts: 5,
@@ -195,10 +196,10 @@ func (s *AuthenticationService) LogoutAll(ctx context.Context, userID uuid.UUID)
 func (s *AuthenticationService) VerifyEmail(ctx context.Context, token string) error {
 	user, err := s.userRepo.GetByVerifyToken(ctx, token)
 	if err != nil {
-		return fmt.Errorf("invalid or expired verification token")
+		return ErrInvalidVerifyToken
 	}
 	if user.EmailVerifyExpires != nil && time.Now().After(*user.EmailVerifyExpires) {
-		return fmt.Errorf("verification token expired")
+		return ErrVerifyTokenExpired
 	}
 
 	user.EmailVerified = true
@@ -236,10 +237,10 @@ func (s *AuthenticationService) ForgotPassword(ctx context.Context, email string
 func (s *AuthenticationService) ResetPassword(ctx context.Context, token, newPassword string) error {
 	user, err := s.userRepo.GetByResetToken(ctx, token)
 	if err != nil {
-		return fmt.Errorf("invalid or expired reset token")
+		return ErrInvalidResetToken
 	}
 	if user.PasswordResetExpires != nil && time.Now().After(*user.PasswordResetExpires) {
-		return fmt.Errorf("reset token expired")
+		return ErrResetTokenExpired
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
