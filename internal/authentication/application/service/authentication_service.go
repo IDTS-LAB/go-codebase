@@ -22,12 +22,15 @@ var (
 	ErrInvalidRefreshToken = errors.New("invalid or expired refresh token")
 	ErrAccountDisabled     = errors.New("account is disabled")
 	ErrAccountLocked       = errors.New("account is temporarily locked")
+	ErrEmailNotVerified    = errors.New("email not verified")
 )
 
 type AuthenticationService struct {
 	userRepo         repository.UserRepository
 	refreshRepo      repository.RefreshTokenRepository
 	tokenService     domain.TokenService
+	mailer           domain.Emailer
+	frontendURL      string
 	denylist         func(ctx context.Context, jti string, ttl time.Duration) error
 	accessTokenTTL   time.Duration
 	refreshTokenTTL  time.Duration
@@ -39,11 +42,15 @@ func NewAuthenticationService(
 	userRepo repository.UserRepository,
 	refreshRepo repository.RefreshTokenRepository,
 	tokenService domain.TokenService,
+	mailer domain.Emailer,
+	frontendURL string,
 ) *AuthenticationService {
 	return &AuthenticationService{
 		userRepo:         userRepo,
 		refreshRepo:      refreshRepo,
 		tokenService:     tokenService,
+		mailer:           mailer,
+		frontendURL:      frontendURL,
 		accessTokenTTL:   15 * time.Minute,
 		refreshTokenTTL:  7 * 24 * time.Hour,
 		maxLoginAttempts: 5,
@@ -76,6 +83,19 @@ func (s *AuthenticationService) Register(ctx context.Context, email, password, n
 		return nil, err
 	}
 
+	token, err := generateRefreshToken()
+	if err != nil {
+		return nil, fmt.Errorf("generate verification token: %w", err)
+	}
+	expires := time.Now().Add(24 * time.Hour)
+	user.EmailVerifyToken = &token
+	user.EmailVerifyExpires = &expires
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return nil, err
+	}
+
+	_ = s.mailer.SendVerification(user.Email, user.Name, token)
+
 	return user, nil
 }
 
@@ -91,6 +111,10 @@ func (s *AuthenticationService) Login(ctx context.Context, email, password strin
 
 	if user.IsLocked() {
 		return nil, ErrAccountLocked
+	}
+
+	if !user.EmailVerified {
+		return nil, ErrEmailNotVerified
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
@@ -166,6 +190,90 @@ func (s *AuthenticationService) Logout(ctx context.Context, refreshTokenStr stri
 
 func (s *AuthenticationService) LogoutAll(ctx context.Context, userID uuid.UUID) error {
 	return s.refreshRepo.RevokeAllByUserID(ctx, userID)
+}
+
+func (s *AuthenticationService) VerifyEmail(ctx context.Context, token string) error {
+	user, err := s.userRepo.GetByVerifyToken(ctx, token)
+	if err != nil {
+		return fmt.Errorf("invalid or expired verification token")
+	}
+	if user.EmailVerifyExpires != nil && time.Now().After(*user.EmailVerifyExpires) {
+		return fmt.Errorf("verification token expired")
+	}
+
+	user.EmailVerified = true
+	user.EmailVerifyToken = nil
+	user.EmailVerifyExpires = nil
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return err
+	}
+
+	_ = s.mailer.SendWelcome(user.Email, user.Name)
+	return nil
+}
+
+func (s *AuthenticationService) ForgotPassword(ctx context.Context, email string) error {
+	user, err := s.userRepo.GetByEmail(ctx, email)
+	if err != nil {
+		return nil
+	}
+
+	token, err := generateRefreshToken()
+	if err != nil {
+		return err
+	}
+	expires := time.Now().Add(1 * time.Hour)
+	user.PasswordResetToken = &token
+	user.PasswordResetExpires = &expires
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return err
+	}
+
+	_ = s.mailer.SendPasswordReset(user.Email, user.Name, token)
+	return nil
+}
+
+func (s *AuthenticationService) ResetPassword(ctx context.Context, token, newPassword string) error {
+	user, err := s.userRepo.GetByResetToken(ctx, token)
+	if err != nil {
+		return fmt.Errorf("invalid or expired reset token")
+	}
+	if user.PasswordResetExpires != nil && time.Now().After(*user.PasswordResetExpires) {
+		return fmt.Errorf("reset token expired")
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	user.Password = string(hashedPassword)
+	user.PasswordResetToken = nil
+	user.PasswordResetExpires = nil
+	return s.userRepo.Update(ctx, user)
+}
+
+func (s *AuthenticationService) ResendVerification(ctx context.Context, email string) error {
+	user, err := s.userRepo.GetByEmail(ctx, email)
+	if err != nil {
+		return nil
+	}
+	if user.EmailVerified {
+		return nil
+	}
+
+	token, err := generateRefreshToken()
+	if err != nil {
+		return err
+	}
+	expires := time.Now().Add(24 * time.Hour)
+	user.EmailVerifyToken = &token
+	user.EmailVerifyExpires = &expires
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return err
+	}
+
+	return s.mailer.SendVerification(user.Email, user.Name, token)
 }
 
 type TokenPair struct {
