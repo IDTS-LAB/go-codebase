@@ -7,31 +7,35 @@ import (
 )
 
 type SMTPMailer struct {
-	host     string
-	port     int
-	username string
-	password string
-	useTLS   bool
-	from     string
-	fromName string
+	host        string
+	port        int
+	username    string
+	password    string
+	useTLS      bool
+	from        string
+	fromName    string
+	frontendURL string
 }
 
-func NewSMTPMailer(host string, port int, username, password string, useTLS bool, from, fromName string) *SMTPMailer {
+func NewSMTPMailer(host string, port int, username, password string, useTLS bool, from, fromName, frontendURL string) *SMTPMailer {
 	return &SMTPMailer{
 		host: host, port: port, username: username,
 		password: password, useTLS: useTLS, from: from, fromName: fromName,
+		frontendURL: frontendURL,
 	}
 }
 
 func (m *SMTPMailer) SendVerification(to, name, token string) error {
 	subject := "Verify your email address"
-	body := fmt.Sprintf("Hello %s,\n\nPlease verify your email by clicking the link below:\n\n%s/verify-email?token=%s\n\nIf you didn't create an account, please ignore this email.", name, token, token)
+	verifyURL := m.frontendURL + "/verify-email?token=" + token
+	body := fmt.Sprintf("Hello %s,\n\nPlease verify your email by clicking the link below:\n\n%s\n\nIf you didn't create an account, please ignore this email.", name, verifyURL)
 	return m.send(to, subject, body)
 }
 
 func (m *SMTPMailer) SendPasswordReset(to, name, token string) error {
 	subject := "Reset your password"
-	body := fmt.Sprintf("Hello %s,\n\nYou requested a password reset. Click the link below to reset your password:\n\n%s/reset-password?token=%s\n\nThis link expires in 1 hour. If you didn't request this, please ignore this email.", name, token, token)
+	resetURL := m.frontendURL + "/reset-password?token=" + token
+	body := fmt.Sprintf("Hello %s,\n\nYou requested a password reset. Click the link below to reset your password:\n\n%s\n\nThis link expires in 1 hour. If you didn't request this, please ignore this email.", name, resetURL)
 	return m.send(to, subject, body)
 }
 
