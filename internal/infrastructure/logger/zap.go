@@ -11,10 +11,20 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var Module = fx.Module("zap", fx.Provide(NewZapLogger))
+var Module = fx.Module("zap",
+	fx.Provide(NewZapLogger),
+	fx.Provide(NewZapStdLogger),
+)
 
 type ZapLogger struct {
 	logger *zap.Logger
+}
+
+func NewZapStdLogger(log domain.Logger) *zap.Logger {
+	if z, ok := log.(*ZapLogger); ok {
+		return z.logger
+	}
+	return zap.NewNop()
 }
 
 func NewZapLogger(cfg *config.Config) (domain.Logger, error) {
