@@ -92,3 +92,20 @@ telemetry:
 # =============================================================================
 asynq:
   redis_addr: localhost:6379
+
+# =============================================================================
+# Email Service
+# =============================================================================
+email:
+  provider: console
+  from: "no-reply@example.com"
+  from_name: "App"
+  frontend_url: "http://localhost:3000"
+  smtp:
+    host: localhost
+    port: 587
+    username: ""
+    password: ""
+    use_tls: true
+  sendgrid:
+    api_key: ""

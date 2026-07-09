@@ -13,6 +13,10 @@ func NewRouter(handler *Handler, authMiddleware func(http.Handler) http.Handler)
 	r.Post("/login", handler.Login)
 	r.Post("/refresh", handler.RefreshToken)
 	r.Post("/logout", handler.Logout)
+	r.Get("/verify-email", handler.VerifyEmail)
+	r.Post("/forgot-password", handler.ForgotPassword)
+	r.Post("/reset-password", handler.ResetPassword)
+	r.Post("/resend-verification", handler.ResendVerification)
 
 	r.Group(func(r chi.Router) {
 		r.Use(authMiddleware)
