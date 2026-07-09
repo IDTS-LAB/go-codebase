@@ -8,12 +8,17 @@ import (
 
 type User struct {
 	domain.Entity
-	Email              string     `json:"email"`
-	Password           string     `json:"-"`
-	Name               string     `json:"name"`
-	IsActive           bool       `json:"is_active"`
-	FailedLoginAttempts int       `json:"failed_login_attempts"`
-	LockedUntil        *time.Time `json:"locked_until,omitempty"`
+	Email                string     `json:"email"`
+	Password             string     `json:"-"`
+	Name                 string     `json:"name"`
+	IsActive             bool       `json:"is_active"`
+	FailedLoginAttempts  int        `json:"failed_login_attempts"`
+	LockedUntil          *time.Time `json:"locked_until,omitempty"`
+	EmailVerified        bool       `json:"email_verified"`
+	EmailVerifyToken     *string    `json:"-"`
+	EmailVerifyExpires   *time.Time `json:"-"`
+	PasswordResetToken   *string    `json:"-"`
+	PasswordResetExpires *time.Time `json:"-"`
 }
 
 func NewUser(email, password, name string) *User {
