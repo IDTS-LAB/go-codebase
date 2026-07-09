@@ -10,6 +10,20 @@ import (
 	"github.com/google/uuid"
 )
 
+const userSelectColumns = "id, email, password, name, is_active, failed_login_attempts, locked_until, email_verified, email_verify_token, email_verify_expires, password_reset_token, password_reset_expires, created_at, updated_at, deleted_at"
+
+func scanUser(row interface{ Scan(...interface{}) error }) (*entity.User, error) {
+	user := &entity.User{}
+	err := row.Scan(
+		&user.ID, &user.Email, &user.Password, &user.Name, &user.IsActive,
+		&user.FailedLoginAttempts, &user.LockedUntil,
+		&user.EmailVerified, &user.EmailVerifyToken, &user.EmailVerifyExpires,
+		&user.PasswordResetToken, &user.PasswordResetExpires,
+		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
+	)
+	return user, err
+}
+
 type userRepository struct {
 	db *sql.DB
 }
@@ -19,8 +33,14 @@ func NewUserRepository(db *sql.DB) repository.UserRepository {
 }
 
 func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
-	query := `INSERT INTO users (id, email, password, name, is_active, created_at, updated_at, email_verified) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
-	_, err := r.db.ExecContext(ctx, query, user.ID, user.Email, user.Password, user.Name, user.IsActive, user.CreatedAt, user.UpdatedAt, user.EmailVerified)
+	query := `INSERT INTO users (id, email, password, name, is_active, failed_login_attempts, locked_until, email_verified, email_verify_token, email_verify_expires, password_reset_token, password_reset_expires, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
+	_, err := r.db.ExecContext(ctx, query,
+		user.ID, user.Email, user.Password, user.Name, user.IsActive,
+		user.FailedLoginAttempts, user.LockedUntil,
+		user.EmailVerified, user.EmailVerifyToken, user.EmailVerifyExpires,
+		user.PasswordResetToken, user.PasswordResetExpires,
+		user.CreatedAt, user.UpdatedAt,
+	)
 	if err != nil {
 		return fmt.Errorf("insert user: %w", err)
 	}
@@ -28,15 +48,8 @@ func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
 }
 
 func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.User, error) {
-	query := `SELECT id, email, password, name, is_active, created_at, updated_at, deleted_at, failed_login_attempts, locked_until, email_verified, email_verify_token, email_verify_expires, password_reset_token, password_reset_expires FROM users WHERE id = $1 AND deleted_at IS NULL`
-	user := &entity.User{}
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&user.ID, &user.Email, &user.Password, &user.Name, &user.IsActive,
-		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
-		&user.FailedLoginAttempts, &user.LockedUntil,
-		&user.EmailVerified, &user.EmailVerifyToken, &user.EmailVerifyExpires,
-		&user.PasswordResetToken, &user.PasswordResetExpires,
-	)
+	query := `SELECT ` + userSelectColumns + ` FROM users WHERE id = $1 AND deleted_at IS NULL`
+	user, err := scanUser(r.db.QueryRowContext(ctx, query, id))
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("user not found")
 	}
@@ -47,15 +60,8 @@ func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Use
 }
 
 func (r *userRepository) GetByEmail(ctx context.Context, email string) (*entity.User, error) {
-	query := `SELECT id, email, password, name, is_active, created_at, updated_at, deleted_at, failed_login_attempts, locked_until, email_verified, email_verify_token, email_verify_expires, password_reset_token, password_reset_expires FROM users WHERE email = $1 AND deleted_at IS NULL`
-	user := &entity.User{}
-	err := r.db.QueryRowContext(ctx, query, email).Scan(
-		&user.ID, &user.Email, &user.Password, &user.Name, &user.IsActive,
-		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
-		&user.FailedLoginAttempts, &user.LockedUntil,
-		&user.EmailVerified, &user.EmailVerifyToken, &user.EmailVerifyExpires,
-		&user.PasswordResetToken, &user.PasswordResetExpires,
-	)
+	query := `SELECT ` + userSelectColumns + ` FROM users WHERE email = $1 AND deleted_at IS NULL`
+	user, err := scanUser(r.db.QueryRowContext(ctx, query, email))
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("user not found")
 	}
@@ -66,15 +72,8 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*entity.
 }
 
 func (r *userRepository) GetByVerifyToken(ctx context.Context, token string) (*entity.User, error) {
-	query := `SELECT id, email, password, name, is_active, created_at, updated_at, deleted_at, failed_login_attempts, locked_until, email_verified, email_verify_token, email_verify_expires, password_reset_token, password_reset_expires FROM users WHERE email_verify_token = $1 AND deleted_at IS NULL`
-	user := &entity.User{}
-	err := r.db.QueryRowContext(ctx, query, token).Scan(
-		&user.ID, &user.Email, &user.Password, &user.Name, &user.IsActive,
-		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
-		&user.FailedLoginAttempts, &user.LockedUntil,
-		&user.EmailVerified, &user.EmailVerifyToken, &user.EmailVerifyExpires,
-		&user.PasswordResetToken, &user.PasswordResetExpires,
-	)
+	query := `SELECT ` + userSelectColumns + ` FROM users WHERE email_verify_token = $1 AND deleted_at IS NULL`
+	user, err := scanUser(r.db.QueryRowContext(ctx, query, token))
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("user not found")
 	}
@@ -85,15 +84,8 @@ func (r *userRepository) GetByVerifyToken(ctx context.Context, token string) (*e
 }
 
 func (r *userRepository) GetByResetToken(ctx context.Context, token string) (*entity.User, error) {
-	query := `SELECT id, email, password, name, is_active, created_at, updated_at, deleted_at, failed_login_attempts, locked_until, email_verified, email_verify_token, email_verify_expires, password_reset_token, password_reset_expires FROM users WHERE password_reset_token = $1 AND deleted_at IS NULL`
-	user := &entity.User{}
-	err := r.db.QueryRowContext(ctx, query, token).Scan(
-		&user.ID, &user.Email, &user.Password, &user.Name, &user.IsActive,
-		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
-		&user.FailedLoginAttempts, &user.LockedUntil,
-		&user.EmailVerified, &user.EmailVerifyToken, &user.EmailVerifyExpires,
-		&user.PasswordResetToken, &user.PasswordResetExpires,
-	)
+	query := `SELECT ` + userSelectColumns + ` FROM users WHERE password_reset_token = $1 AND deleted_at IS NULL`
+	user, err := scanUser(r.db.QueryRowContext(ctx, query, token))
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("user not found")
 	}
