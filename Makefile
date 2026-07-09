@@ -1,4 +1,4 @@
-.PHONY: run build test lint fmt migrate-up migrate-down sqlc swagger docker-up docker-down clean
+.PHONY: run build test lint fmt migrate-up migrate-down sqlc swagger docker-up docker-down clean rename
 
 APP_NAME := go-codebase
 BUILD_DIR := bin
@@ -49,5 +49,8 @@ clean:
 
 mod-tidy:
 	go mod tidy
+
+rename:
+	./scripts/rename-module.sh $(MODULE)
 
 .DEFAULT_GOAL := run
