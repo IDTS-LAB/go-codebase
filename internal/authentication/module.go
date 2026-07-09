@@ -13,6 +13,5 @@ var Module = fx.Module("authentication",
 		persistence.NewRefreshTokenRepository,
 		service.NewAuthenticationService,
 		httpHandler.NewHandler,
-		httpHandler.NewRouter,
 	),
 )

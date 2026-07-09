@@ -19,6 +19,5 @@ var Module = fx.Module("authorization",
 		casbin.NewPolicyLoader,
 		service.NewAuthorizationService,
 		httpHandler.NewHandler,
-		httpHandler.NewRouter,
 	),
 )

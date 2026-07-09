@@ -40,7 +40,6 @@ var Module = fx.Module("todo",
 
 		// Interface
 		httpHandler.NewHandler,
-		httpHandler.NewRouter,
 	),
 
 	fx.Invoke(
