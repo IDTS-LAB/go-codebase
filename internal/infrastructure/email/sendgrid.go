@@ -8,14 +8,19 @@ import (
 )
 
 type SendGridMailer struct {
-	apiKey      string
+	client      *sendgrid.Client
 	from        string
 	fromName    string
 	frontendURL string
 }
 
 func NewSendGridMailer(apiKey, from, fromName, frontendURL string) *SendGridMailer {
-	return &SendGridMailer{apiKey: apiKey, from: from, fromName: fromName, frontendURL: frontendURL}
+	return &SendGridMailer{
+		client:      sendgrid.NewSendClient(apiKey),
+		from:        from,
+		fromName:    fromName,
+		frontendURL: frontendURL,
+	}
 }
 
 func (m *SendGridMailer) SendVerification(to, name, token string) error {
@@ -47,7 +52,9 @@ func (m *SendGridMailer) SendInvite(to, name, inviterName string) error {
 func (m *SendGridMailer) send(to, subject, htmlContent string) error {
 	from := mail.NewEmail(m.fromName, m.from)
 	message := mail.NewSingleEmail(from, subject, mail.NewEmail(to, to), "", htmlContent)
-	client := sendgrid.NewSendClient(m.apiKey)
-	_, err := client.Send(message)
-	return err
+	_, err := m.client.Send(message)
+	if err != nil {
+		return fmt.Errorf("sendgrid: send email: %w", err)
+	}
+	return nil
 }
