@@ -30,6 +30,7 @@ type Config struct {
 	Log         LogConfig
 	Telemetry   TelemetryConfig
 	Asynq       AsynqConfig
+	Email       EmailConfig
 }
 
 // AppConfig holds application-level settings.
@@ -118,6 +119,30 @@ type TelemetryConfig struct {
 // AsynqConfig holds background job settings.
 type AsynqConfig struct {
 	RedisAddr string
+}
+
+// EmailConfig holds email service settings.
+type EmailConfig struct {
+	Provider    string         `koanf:"provider"`
+	From        string         `koanf:"from"`
+	FromName    string         `koanf:"from_name"`
+	FrontendURL string         `koanf:"frontend_url"`
+	SMTP        SMTPConfig     `koanf:"smtp"`
+	SendGrid    SendGridConfig `koanf:"sendgrid"`
+}
+
+// SMTPConfig holds SMTP server settings.
+type SMTPConfig struct {
+	Host     string `koanf:"host"`
+	Port     int    `koanf:"port"`
+	Username string `koanf:"username"`
+	Password string `koanf:"password"`
+	UseTLS   bool   `koanf:"use_tls"`
+}
+
+// SendGridConfig holds SendGrid API settings.
+type SendGridConfig struct {
+	APIKey string `koanf:"api_key"`
 }
 
 func New() (*Config, error) {
@@ -227,6 +252,19 @@ func setDefaults(cfg *Config) {
 	// Telemetry
 	if cfg.Telemetry.SampleRate == 0 {
 		cfg.Telemetry.SampleRate = 1.0
+	}
+
+	// Email
+	cfg.Email = EmailConfig{
+		Provider:    "console",
+		From:        "no-reply@example.com",
+		FromName:    "App",
+		FrontendURL: "http://localhost:3000",
+		SMTP: SMTPConfig{
+			Host:   "localhost",
+			Port:   587,
+			UseTLS: true,
+		},
 	}
 }
 
@@ -400,5 +438,39 @@ func applyEnvOverrides(cfg *Config) {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			cfg.Telemetry.SampleRate = f
 		}
+	}
+
+	// Email
+	if v := os.Getenv("EMAIL_PROVIDER"); v != "" {
+		cfg.Email.Provider = v
+	}
+	if v := os.Getenv("EMAIL_FROM"); v != "" {
+		cfg.Email.From = v
+	}
+	if v := os.Getenv("EMAIL_FROM_NAME"); v != "" {
+		cfg.Email.FromName = v
+	}
+	if v := os.Getenv("FRONTEND_URL"); v != "" {
+		cfg.Email.FrontendURL = v
+	}
+	if v := os.Getenv("SMTP_HOST"); v != "" {
+		cfg.Email.SMTP.Host = v
+	}
+	if v := os.Getenv("SMTP_PORT"); v != "" {
+		if port, err := strconv.Atoi(v); err == nil {
+			cfg.Email.SMTP.Port = port
+		}
+	}
+	if v := os.Getenv("SMTP_USERNAME"); v != "" {
+		cfg.Email.SMTP.Username = v
+	}
+	if v := os.Getenv("SMTP_PASSWORD"); v != "" {
+		cfg.Email.SMTP.Password = v
+	}
+	if v := os.Getenv("SMTP_USE_TLS"); v != "" {
+		cfg.Email.SMTP.UseTLS = v == "true" || v == "1"
+	}
+	if v := os.Getenv("SENDGRID_API_KEY"); v != "" {
+		cfg.Email.SendGrid.APIKey = v
 	}
 }
