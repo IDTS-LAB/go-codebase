@@ -189,7 +189,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} utils.SuccessResponse{data=dto.MessageResponse}
 // @Failure 401 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/sessions/logout-all [post]
+// @Router /auth/logout-all [post]
 func (h *Handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	if userID == "" {
@@ -216,7 +216,7 @@ func (h *Handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} utils.SuccessResponse{data=dto.UserResponse}
 // @Failure 401 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/sessions/me [get]
+// @Router /auth/me [get]
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	if userID == "" {

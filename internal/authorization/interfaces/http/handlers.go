@@ -34,7 +34,7 @@ func NewHandler(svc *service.AuthorizationService, v *validator.Validator) *Hand
 // @Failure 400 {object} utils.ErrorResponse
 // @Failure 409 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/roles [post]
+// @Router /auth/sessions/roles [post]
 func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 	var req dto.CreateRoleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -63,7 +63,7 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} utils.SuccessResponse{data=dto.ListResponse}
 // @Failure 500 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/roles [get]
+// @Router /auth/sessions/roles [get]
 func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
 	page, perPage := 1, 20
 	if p := r.URL.Query().Get("page"); p != "" {
@@ -89,7 +89,7 @@ func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} utils.SuccessResponse{data=dto.RoleResponse}
 // @Failure 404 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/roles/{id} [get]
+// @Router /auth/sessions/roles/{id} [get]
 func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -116,7 +116,7 @@ func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} utils.ErrorResponse
 // @Failure 404 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/roles/{id} [put]
+// @Router /auth/sessions/roles/{id} [put]
 func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -144,7 +144,7 @@ func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} utils.SuccessResponse
 // @Failure 404 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/roles/{id} [delete]
+// @Router /auth/sessions/roles/{id} [delete]
 func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -169,7 +169,7 @@ func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} utils.ErrorResponse
 // @Failure 409 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/permissions [post]
+// @Router /auth/sessions/permissions [post]
 func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 	var req dto.CreatePermissionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -198,7 +198,7 @@ func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} utils.SuccessResponse{data=dto.ListResponse}
 // @Failure 500 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/permissions [get]
+// @Router /auth/sessions/permissions [get]
 func (h *Handler) ListPermissions(w http.ResponseWriter, r *http.Request) {
 	page, perPage := 1, 20
 	if p := r.URL.Query().Get("page"); p != "" {
@@ -224,7 +224,7 @@ func (h *Handler) ListPermissions(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} utils.SuccessResponse{data=dto.PermissionResponse}
 // @Failure 404 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/permissions/{id} [get]
+// @Router /auth/sessions/permissions/{id} [get]
 func (h *Handler) GetPermission(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -251,7 +251,7 @@ func (h *Handler) GetPermission(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} utils.ErrorResponse
 // @Failure 404 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/permissions/{id} [put]
+// @Router /auth/sessions/permissions/{id} [put]
 func (h *Handler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -279,7 +279,7 @@ func (h *Handler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} utils.SuccessResponse
 // @Failure 404 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/permissions/{id} [delete]
+// @Router /auth/sessions/permissions/{id} [delete]
 func (h *Handler) DeletePermission(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -304,7 +304,7 @@ func (h *Handler) DeletePermission(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} utils.SuccessResponse
 // @Failure 400 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/users/{userId}/roles [post]
+// @Router /auth/sessions/users/{userId}/roles [post]
 func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
 	var req dto.AssignRoleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -331,7 +331,7 @@ func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} utils.SuccessResponse
 // @Failure 400 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/users/{userId}/roles/{roleId} [delete]
+// @Router /auth/sessions/users/{userId}/roles/{roleId} [delete]
 func (h *Handler) RemoveRole(w http.ResponseWriter, r *http.Request) {
 	userID, err := uuid.Parse(chi.URLParam(r, "userId"))
 	if err != nil {
@@ -359,7 +359,7 @@ func (h *Handler) RemoveRole(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} utils.SuccessResponse{data=[]dto.RoleResponse}
 // @Failure 400 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/users/{userId}/roles [get]
+// @Router /auth/sessions/users/{userId}/roles [get]
 func (h *Handler) GetUserRoles(w http.ResponseWriter, r *http.Request) {
 	userID, err := uuid.Parse(chi.URLParam(r, "userId"))
 	if err != nil {
@@ -385,7 +385,7 @@ func (h *Handler) GetUserRoles(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} utils.SuccessResponse
 // @Failure 400 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/roles/{roleId}/permissions [post]
+// @Router /auth/sessions/roles/{roleId}/permissions [post]
 func (h *Handler) AssignPermission(w http.ResponseWriter, r *http.Request) {
 	var req dto.AssignPermissionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -412,7 +412,7 @@ func (h *Handler) AssignPermission(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} utils.SuccessResponse
 // @Failure 400 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/roles/{roleId}/permissions/{permissionId} [delete]
+// @Router /auth/sessions/roles/{roleId}/permissions/{permissionId} [delete]
 func (h *Handler) RemovePermission(w http.ResponseWriter, r *http.Request) {
 	roleID, err := uuid.Parse(chi.URLParam(r, "roleId"))
 	if err != nil {
@@ -440,7 +440,7 @@ func (h *Handler) RemovePermission(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} utils.SuccessResponse{data=[]dto.PermissionResponse}
 // @Failure 400 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/roles/{roleId}/permissions [get]
+// @Router /auth/sessions/roles/{roleId}/permissions [get]
 func (h *Handler) GetRolePermissions(w http.ResponseWriter, r *http.Request) {
 	roleID, err := uuid.Parse(chi.URLParam(r, "roleId"))
 	if err != nil {
@@ -466,7 +466,7 @@ func (h *Handler) GetRolePermissions(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} utils.ErrorResponse
 // @Failure 401 {object} utils.ErrorResponse
 // @Security BearerAuth
-// @Router /auth/check-permission [post]
+// @Router /auth/sessions/check-permission [post]
 func (h *Handler) CheckPermission(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	if userID == "" {
