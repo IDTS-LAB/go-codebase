@@ -175,6 +175,10 @@ func (s *AuthenticationService) RefreshToken(ctx context.Context, refreshTokenSt
 		return nil, ErrAccountDisabled
 	}
 
+	if !user.EmailVerified {
+		return nil, ErrEmailNotVerified
+	}
+
 	if err := s.refreshRepo.Revoke(ctx, refreshTokenStr); err != nil {
 		return nil, err
 	}
@@ -251,6 +255,7 @@ func (s *AuthenticationService) ResetPassword(ctx context.Context, token, newPas
 	user.Password = string(hashedPassword)
 	user.PasswordResetToken = nil
 	user.PasswordResetExpires = nil
+	_ = s.refreshRepo.RevokeAllByUserID(ctx, user.ID)
 	return s.userRepo.Update(ctx, user)
 }
 

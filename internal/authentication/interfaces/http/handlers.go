@@ -44,7 +44,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	user, err := h.svc.Register(r.Context(), req.Email, req.Password, req.Name)
+	_, err := h.svc.Register(r.Context(), req.Email, req.Password, req.Name)
 	if err != nil {
 		switch err {
 		case service.ErrEmailAlreadyExists:
@@ -54,17 +54,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	tokens, err := h.svc.GenerateTokens(r.Context(), user)
-	if err != nil {
-		utils.RespondInternalError(w, "failed to generate tokens")
-		return
-	}
-	utils.RespondCreated(w, dto.TokenResponse{
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
-		ExpiresIn:    tokens.ExpiresIn,
-		TokenType:    "Bearer",
-	})
+	utils.RespondCreated(w, dto.MessageResponse{Message: "user registered successfully. Check your email for verification."})
 }
 
 // Login godoc
@@ -248,7 +238,12 @@ func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.VerifyEmail(r.Context(), token); err != nil {
-		utils.RespondBadRequest(w, err.Error())
+		switch err {
+		case service.ErrInvalidVerifyToken, service.ErrVerifyTokenExpired:
+			utils.RespondBadRequest(w, err.Error())
+		default:
+			utils.RespondInternalError(w, "failed to verify email")
+		}
 		return
 	}
 	utils.RespondSuccess(w, map[string]string{"message": "email verified successfully"})
@@ -267,6 +262,10 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	var req dto.ForgotPasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondBadRequest(w, "invalid request body")
+		return
+	}
+	if err := h.validator.Validate(req); err != nil {
+		utils.RespondBadRequest(w, err.Error())
 		return
 	}
 	if err := h.svc.ForgotPassword(r.Context(), req.Email); err != nil {
@@ -297,7 +296,12 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.ResetPassword(r.Context(), req.Token, req.NewPassword); err != nil {
-		utils.RespondBadRequest(w, err.Error())
+		switch err {
+		case service.ErrInvalidResetToken, service.ErrResetTokenExpired:
+			utils.RespondBadRequest(w, err.Error())
+		default:
+			utils.RespondInternalError(w, "failed to reset password")
+		}
 		return
 	}
 	utils.RespondSuccess(w, map[string]string{"message": "password reset successfully"})
@@ -316,6 +320,10 @@ func (h *Handler) ResendVerification(w http.ResponseWriter, r *http.Request) {
 	var req dto.ResendVerificationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondBadRequest(w, "invalid request body")
+		return
+	}
+	if err := h.validator.Validate(req); err != nil {
+		utils.RespondBadRequest(w, err.Error())
 		return
 	}
 	if err := h.svc.ResendVerification(r.Context(), req.Email); err != nil {
