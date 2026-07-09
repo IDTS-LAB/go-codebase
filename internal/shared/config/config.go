@@ -255,16 +255,26 @@ func setDefaults(cfg *Config) {
 	}
 
 	// Email
-	cfg.Email = EmailConfig{
-		Provider:    "console",
-		From:        "no-reply@example.com",
-		FromName:    "App",
-		FrontendURL: "http://localhost:3000",
-		SMTP: SMTPConfig{
-			Host:   "localhost",
-			Port:   587,
-			UseTLS: true,
-		},
+	if cfg.Email.Provider == "" {
+		cfg.Email.Provider = "console"
+	}
+	if cfg.Email.From == "" {
+		cfg.Email.From = "no-reply@example.com"
+	}
+	if cfg.Email.FromName == "" {
+		cfg.Email.FromName = "App"
+	}
+	if cfg.Email.FrontendURL == "" {
+		cfg.Email.FrontendURL = "http://localhost:3000"
+	}
+	if cfg.Email.SMTP.Host == "" {
+		cfg.Email.SMTP.Host = "localhost"
+	}
+	if cfg.Email.SMTP.Port == 0 {
+		cfg.Email.SMTP.Port = 587
+	}
+	if !cfg.Email.SMTP.UseTLS && cfg.Email.SMTP.Host == "localhost" {
+		cfg.Email.SMTP.UseTLS = true
 	}
 }
 
