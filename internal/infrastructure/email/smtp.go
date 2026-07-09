@@ -28,34 +28,46 @@ func NewSMTPMailer(host string, port int, username, password string, useTLS bool
 func (m *SMTPMailer) SendVerification(to, name, token string) error {
 	subject := "Verify your email address"
 	verifyURL := m.frontendURL + "/verify-email?token=" + token
-	body := fmt.Sprintf("Hello %s,\n\nPlease verify your email by clicking the link below:\n\n%s\n\nIf you didn't create an account, please ignore this email.", name, verifyURL)
-	return m.send(to, subject, body)
+	content, err := renderTemplate("verification", TemplateData{Name: name, VerifyURL: verifyURL})
+	if err != nil {
+		return err
+	}
+	return m.send(to, subject, content)
 }
 
 func (m *SMTPMailer) SendPasswordReset(to, name, token string) error {
 	subject := "Reset your password"
 	resetURL := m.frontendURL + "/reset-password?token=" + token
-	body := fmt.Sprintf("Hello %s,\n\nYou requested a password reset. Click the link below to reset your password:\n\n%s\n\nThis link expires in 1 hour. If you didn't request this, please ignore this email.", name, resetURL)
-	return m.send(to, subject, body)
+	content, err := renderTemplate("password_reset", TemplateData{Name: name, ResetURL: resetURL})
+	if err != nil {
+		return err
+	}
+	return m.send(to, subject, content)
 }
 
 func (m *SMTPMailer) SendWelcome(to, name string) error {
 	subject := fmt.Sprintf("Welcome %s!", name)
-	body := fmt.Sprintf("Hello %s,\n\nWelcome to our platform! Your account is now active.", name)
-	return m.send(to, subject, body)
+	content, err := renderTemplate("welcome", TemplateData{Name: name})
+	if err != nil {
+		return err
+	}
+	return m.send(to, subject, content)
 }
 
 func (m *SMTPMailer) SendInvite(to, name, inviterName string) error {
 	subject := fmt.Sprintf("%s invited you to join", inviterName)
-	body := fmt.Sprintf("Hello %s,\n\n%s has invited you to join our platform.\n\nClick the link below to get started.", name, inviterName)
-	return m.send(to, subject, body)
+	content, err := renderTemplate("invite", TemplateData{Name: name, InviterName: inviterName})
+	if err != nil {
+		return err
+	}
+	return m.send(to, subject, content)
 }
 
 func (m *SMTPMailer) send(to, subject, body string) error {
 	addr := fmt.Sprintf("%s:%d", m.host, m.port)
 	auth := smtp.PlainAuth("", m.username, m.password, m.host)
 
-	msg := fmt.Sprintf("From: %s <%s>\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
+	msg := fmt.Sprintf("From: %s <%s>\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n%s",
 		m.fromName, m.from, to, subject, body)
 
 	if m.useTLS {

@@ -29,6 +29,6 @@ func NewEmailer(cfg *config.Config) domain.Emailer {
 			cfg.Email.FrontendURL,
 		)
 	default:
-		return NewConsoleMailer(cfg.Email.From, cfg.Email.FromName)
+		return NewConsoleMailer(cfg.Email.From, cfg.Email.FromName, cfg.Email.FrontendURL)
 	}
 }

@@ -26,26 +26,38 @@ func NewSendGridMailer(apiKey, from, fromName, frontendURL string) *SendGridMail
 func (m *SendGridMailer) SendVerification(to, name, token string) error {
 	subject := "Verify your email address"
 	verifyURL := m.frontendURL + "/verify-email?token=" + token
-	htmlContent := fmt.Sprintf(`<p>Hello %s,</p><p>Please verify your email by clicking the link below:</p><p><a href="%s">Verify Email</a></p><p>If you didn't create an account, please ignore this email.</p>`, name, verifyURL)
+	htmlContent, err := renderTemplate("verification", TemplateData{Name: name, VerifyURL: verifyURL})
+	if err != nil {
+		return err
+	}
 	return m.send(to, subject, htmlContent)
 }
 
 func (m *SendGridMailer) SendPasswordReset(to, name, token string) error {
 	subject := "Reset your password"
 	resetURL := m.frontendURL + "/reset-password?token=" + token
-	htmlContent := fmt.Sprintf(`<p>Hello %s,</p><p>You requested a password reset. Click the link below:</p><p><a href="%s">Reset Password</a></p><p>This link expires in 1 hour.</p>`, name, resetURL)
+	htmlContent, err := renderTemplate("password_reset", TemplateData{Name: name, ResetURL: resetURL})
+	if err != nil {
+		return err
+	}
 	return m.send(to, subject, htmlContent)
 }
 
 func (m *SendGridMailer) SendWelcome(to, name string) error {
 	subject := fmt.Sprintf("Welcome %s!", name)
-	htmlContent := fmt.Sprintf(`<p>Hello %s,</p><p>Welcome to our platform! Your account is now active.</p>`, name)
+	htmlContent, err := renderTemplate("welcome", TemplateData{Name: name})
+	if err != nil {
+		return err
+	}
 	return m.send(to, subject, htmlContent)
 }
 
 func (m *SendGridMailer) SendInvite(to, name, inviterName string) error {
 	subject := fmt.Sprintf("%s invited you to join", inviterName)
-	htmlContent := fmt.Sprintf(`<p>Hello %s,</p><p>%s has invited you to join our platform.</p>`, name, inviterName)
+	htmlContent, err := renderTemplate("invite", TemplateData{Name: name, InviterName: inviterName})
+	if err != nil {
+		return err
+	}
 	return m.send(to, subject, htmlContent)
 }
 
