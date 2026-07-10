@@ -88,6 +88,31 @@ Casbin-based RBAC with database-backed policies:
 - Middleware enforces permissions on protected routes
 - Check permission endpoint for runtime validation
 
+## Event-Driven & Response Handling
+
+### Event-Driven Email
+
+Services publish domain events to an `EventBus` interface (in-memory synchronous by default, swappable for RabbitMQ/Kafka). An `EmailHandler` subscribes to auth domain events (`auth.user.registered`, `auth.user.email_verified`, `auth.user.password_reset_requested`) and calls the appropriate mailer method.
+
+Flow: `Service → EventBus.Publish() → EmailHandler → domain.Emailer.Send*()`
+
+### API Response Format
+
+All HTTP responses use a unified envelope:
+
+```json
+// Success (single)
+{"success": true, "data": {...}, "meta": null}
+
+// Success (paginated list)
+{"success": true, "data": [...], "meta": {"page": 1, "per_page": 20, "total": 100, "total_pages": 5}}
+
+// Error
+{"success": false, "data": null, "error": {"code": "VALIDATION_ERROR", "message": "..."}}
+```
+
+Errors are mapped to HTTP status codes via `utils.MapError`, which translates `domain.ErrNotFound`, `domain.ErrConflict`, etc.
+
 ## Module Registration
 
 Every module follows this pattern:

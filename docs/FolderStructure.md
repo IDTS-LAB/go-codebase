@@ -51,6 +51,7 @@ internal/
     shared/                  # Shared kernel (cross-module)
         config/              # Koanf configuration loading
         database/            # PostgreSQL connection, sqlc, goose
+        events/              # EventBus interface + InMemoryEventBus + Fx module
         middleware/           # HTTP middleware
             recovery.go      # Panic recovery
             request_id.go    # Request ID propagation
@@ -103,6 +104,7 @@ internal/
             entity/          # Entities (User, RefreshToken)
             repository/      # Repository interfaces
             service/         # Auth domain service
+            event/           # Domain events (UserRegistered, EmailVerified, PasswordResetRequested)
 
         application/         # Use cases
             dto/             # DTOs (RegisterRequest, LoginRequest, TokenResponse)
@@ -110,6 +112,7 @@ internal/
 
         infrastructure/      # External implementations
             persistence/     # SQLC repositories
+            eventbus/        # Event handler implementations (EmailHandler)
 
         interfaces/          # Delivery mechanisms
             http/            # HTTP handlers (Register, Login, Refresh, Logout, Me)
