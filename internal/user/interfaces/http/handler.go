@@ -8,8 +8,8 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/IDTS-LAB/go-codebase/internal/user/application/service"
-	"github.com/google/uuid"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type Handler struct {
@@ -63,7 +63,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	users, total, err := h.svc.List(r.Context(), offset, limit)
 	if err != nil {
-		utils.RespondInternalError(w, "failed to list users")
+		utils.MapError(w, err)
 		return
 	}
 
@@ -79,7 +79,11 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	utils.RespondSuccess(w, ListResponse{Users: resp, Total: total})
+	page := 1
+	if limit > 0 {
+		page = offset/limit + 1
+	}
+	utils.RespondPaginated(w, resp, page, limit, total)
 }
 
 // Get godoc
@@ -102,7 +106,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.svc.GetByID(r.Context(), id)
 	if err != nil {
-		utils.RespondNotFound(w, "user not found")
+		utils.MapError(w, err)
 		return
 	}
 
@@ -128,7 +132,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	if userID == "" {
-		utils.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
+		utils.RespondUnauthorized(w, "user not authenticated")
 		return
 	}
 
@@ -140,7 +144,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.svc.GetByID(r.Context(), id)
 	if err != nil {
-		utils.RespondNotFound(w, "user not found")
+		utils.MapError(w, err)
 		return
 	}
 
@@ -187,7 +191,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.svc.Update(r.Context(), id, req.Name, req.Email, isActive)
 	if err != nil {
-		utils.RespondNotFound(w, "user not found")
+		utils.MapError(w, err)
 		return
 	}
 
@@ -220,7 +224,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.Delete(r.Context(), id); err != nil {
-		utils.RespondNotFound(w, "user not found")
+		utils.MapError(w, err)
 		return
 	}
 

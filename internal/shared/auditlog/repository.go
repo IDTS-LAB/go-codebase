@@ -27,22 +27,22 @@ type AuditLog struct {
 }
 
 type ErrorLog struct {
-	ID           string          `json:"id"`
-	RequestID    string          `json:"request_id"`
-	UserID       *string         `json:"user_id,omitempty"`
-	UserEmail    *string         `json:"user_email,omitempty"`
-	Level        string          `json:"level"`
-	Message      string          `json:"message"`
-	Error        string          `json:"error"`
-	StackTrace   string          `json:"stack_trace"`
-	Method       string          `json:"method"`
-	Path         string          `json:"path"`
-	StatusCode   int             `json:"status_code"`
-	IP           string          `json:"ip"`
-	UserAgent    string          `json:"user_agent"`
-	RequestBody  *string         `json:"request_body,omitempty"`
-	Metadata     json.RawMessage `json:"metadata,omitempty"`
-	CreatedAt    time.Time       `json:"created_at"`
+	ID          string          `json:"id"`
+	RequestID   string          `json:"request_id"`
+	UserID      *string         `json:"user_id,omitempty"`
+	UserEmail   *string         `json:"user_email,omitempty"`
+	Level       string          `json:"level"`
+	Message     string          `json:"message"`
+	Error       string          `json:"error"`
+	StackTrace  string          `json:"stack_trace"`
+	Method      string          `json:"method"`
+	Path        string          `json:"path"`
+	StatusCode  int             `json:"status_code"`
+	IP          string          `json:"ip"`
+	UserAgent   string          `json:"user_agent"`
+	RequestBody *string         `json:"request_body,omitempty"`
+	Metadata    json.RawMessage `json:"metadata,omitempty"`
+	CreatedAt   time.Time       `json:"created_at"`
 }
 
 type Repository struct {

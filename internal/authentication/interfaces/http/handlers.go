@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -46,12 +47,11 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := h.svc.Register(r.Context(), req.Email, req.Password, req.Name)
 	if err != nil {
-		switch err {
-		case service.ErrEmailAlreadyExists:
+		if errors.Is(err, service.ErrEmailAlreadyExists) {
 			utils.RespondConflict(w, "email already registered")
-		default:
-			utils.RespondInternalError(w, "failed to register user")
+			return
 		}
+		utils.RespondInternalError(w, "failed to register user")
 		return
 	}
 	utils.RespondCreated(w, dto.MessageResponse{Message: "user registered successfully. Check your email for verification."})
@@ -80,15 +80,15 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	user, err := h.svc.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
-		switch err {
-		case service.ErrInvalidCredentials:
-			utils.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid email or password")
-		case service.ErrAccountDisabled:
-			utils.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "account is disabled")
-		case service.ErrAccountLocked:
-			utils.RespondError(w, http.StatusForbidden, "ACCOUNT_LOCKED", "account is temporarily locked due to too many failed attempts")
-		case service.ErrEmailNotVerified:
-			utils.RespondError(w, http.StatusForbidden, "EMAIL_NOT_VERIFIED", "email is not verified")
+		switch {
+		case errors.Is(err, service.ErrInvalidCredentials):
+			utils.RespondUnauthorized(w, "invalid email or password")
+		case errors.Is(err, service.ErrAccountDisabled):
+			utils.RespondUnauthorized(w, "account is disabled")
+		case errors.Is(err, service.ErrAccountLocked):
+			utils.RespondForbidden(w, "ACCOUNT_LOCKED", "account is temporarily locked due to too many failed attempts")
+		case errors.Is(err, service.ErrEmailNotVerified):
+			utils.RespondForbidden(w, "EMAIL_NOT_VERIFIED", "email is not verified")
 		default:
 			utils.RespondInternalError(w, "failed to login")
 		}
@@ -130,12 +130,11 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 	tokens, err := h.svc.RefreshToken(r.Context(), req.RefreshToken)
 	if err != nil {
-		switch err {
-		case service.ErrInvalidRefreshToken:
-			utils.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid or expired refresh token")
-		default:
-			utils.RespondInternalError(w, "failed to refresh token")
+		if errors.Is(err, service.ErrInvalidRefreshToken) {
+			utils.RespondUnauthorized(w, "invalid or expired refresh token")
+			return
 		}
+		utils.RespondInternalError(w, "failed to refresh token")
 		return
 	}
 	utils.RespondSuccess(w, dto.TokenResponse{
@@ -238,12 +237,11 @@ func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.VerifyEmail(r.Context(), token); err != nil {
-		switch err {
-		case service.ErrInvalidVerifyToken, service.ErrVerifyTokenExpired:
+		if errors.Is(err, service.ErrInvalidVerifyToken) || errors.Is(err, service.ErrVerifyTokenExpired) {
 			utils.RespondBadRequest(w, err.Error())
-		default:
-			utils.RespondInternalError(w, "failed to verify email")
+			return
 		}
+		utils.RespondInternalError(w, "failed to verify email")
 		return
 	}
 	utils.RespondSuccess(w, map[string]string{"message": "email verified successfully"})
@@ -268,10 +266,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	if err := h.svc.ForgotPassword(r.Context(), req.Email); err != nil {
-		utils.RespondInternalError(w, "failed to process request")
-		return
-	}
+	_ = h.svc.ForgotPassword(r.Context(), req.Email)
 	utils.RespondSuccess(w, map[string]string{"message": "if the email exists, a reset link has been sent"})
 }
 
@@ -296,12 +291,11 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.ResetPassword(r.Context(), req.Token, req.NewPassword); err != nil {
-		switch err {
-		case service.ErrInvalidResetToken, service.ErrResetTokenExpired:
+		if errors.Is(err, service.ErrInvalidResetToken) || errors.Is(err, service.ErrResetTokenExpired) {
 			utils.RespondBadRequest(w, err.Error())
-		default:
-			utils.RespondInternalError(w, "failed to reset password")
+			return
 		}
+		utils.RespondInternalError(w, "failed to reset password")
 		return
 	}
 	utils.RespondSuccess(w, map[string]string{"message": "password reset successfully"})
@@ -326,9 +320,6 @@ func (h *Handler) ResendVerification(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	if err := h.svc.ResendVerification(r.Context(), req.Email); err != nil {
-		utils.RespondInternalError(w, "failed to resend verification")
-		return
-	}
+	_ = h.svc.ResendVerification(r.Context(), req.Email)
 	utils.RespondSuccess(w, map[string]string{"message": "if the email exists, a verification link has been sent"})
 }

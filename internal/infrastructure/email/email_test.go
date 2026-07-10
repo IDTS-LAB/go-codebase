@@ -35,10 +35,10 @@ func (l *capturingLogger) Info(_ context.Context, msg string, fields ...domain.F
 }
 
 func (l *capturingLogger) Debug(_ context.Context, _ string, _ ...domain.Field) {}
-func (l *capturingLogger) Warn(_ context.Context, _ string, _ ...domain.Field)   {}
-func (l *capturingLogger) Error(_ context.Context, _ string, _ ...domain.Field)  {}
-func (l *capturingLogger) Fatal(_ context.Context, _ string, _ ...domain.Field)  {}
-func (l *capturingLogger) With(_ ...domain.Field) domain.Logger                   { return l }
+func (l *capturingLogger) Warn(_ context.Context, _ string, _ ...domain.Field)  {}
+func (l *capturingLogger) Error(_ context.Context, _ string, _ ...domain.Field) {}
+func (l *capturingLogger) Fatal(_ context.Context, _ string, _ ...domain.Field) {}
+func (l *capturingLogger) With(_ ...domain.Field) domain.Logger                 { return l }
 
 func (l *capturingLogger) output() string {
 	l.mu.Lock()

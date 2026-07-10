@@ -1,9 +1,9 @@
 package user
 
 import (
-	httpHandler "github.com/IDTS-LAB/go-codebase/internal/user/interfaces/http"
 	"github.com/IDTS-LAB/go-codebase/internal/user/application/service"
 	"github.com/IDTS-LAB/go-codebase/internal/user/infrastructure/persistence"
+	httpHandler "github.com/IDTS-LAB/go-codebase/internal/user/interfaces/http"
 	"go.uber.org/fx"
 )
 

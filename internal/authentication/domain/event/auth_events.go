@@ -1,8 +1,8 @@
 package event
 
 type UserRegistered struct {
-	Email            string
-	Name             string
+	Email             string
+	Name              string
 	VerificationToken string
 }
 

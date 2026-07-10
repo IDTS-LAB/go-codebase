@@ -104,6 +104,8 @@ func TestCreateTodo_Success(t *testing.T) {
 	var resp map[string]interface{}
 	json.NewDecoder(rr.Body).Decode(&resp)
 	assert.True(t, resp["success"].(bool))
+	assert.NotNil(t, resp["data"])
+	assert.Nil(t, resp["meta"])
 	repo.AssertExpectations(t)
 }
 
@@ -118,6 +120,11 @@ func TestCreateTodo_ValidationError(t *testing.T) {
 	h.CreateTodo(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	assert.Equal(t, "VALIDATION_ERROR", resp["error"].(map[string]interface{})["code"])
 }
 
 func TestGetTodo_Success(t *testing.T) {
@@ -134,6 +141,11 @@ func TestGetTodo_Success(t *testing.T) {
 	h.GetTodo(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.True(t, resp["success"].(bool))
+	assert.NotNil(t, resp["data"])
+	assert.Nil(t, resp["meta"])
 	repo.AssertExpectations(t)
 }
 
@@ -150,6 +162,11 @@ func TestGetTodo_NotFound(t *testing.T) {
 	h.GetTodo(rr, req)
 
 	assert.Equal(t, http.StatusNotFound, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	assert.Equal(t, "NOT_FOUND", resp["error"].(map[string]interface{})["code"])
 	repo.AssertExpectations(t)
 }
 
@@ -168,6 +185,10 @@ func TestDeleteTodo_Success(t *testing.T) {
 	h.DeleteTodo(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.True(t, resp["success"].(bool))
+	assert.Nil(t, resp["meta"])
 	repo.AssertExpectations(t)
 }
 
@@ -185,6 +206,11 @@ func TestCompleteTodo_AlreadyDone(t *testing.T) {
 	h.CompleteTodo(rr, req)
 
 	assert.Equal(t, http.StatusConflict, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	assert.Equal(t, "CONFLICT", resp["error"].(map[string]interface{})["code"])
 	repo.AssertExpectations(t)
 }
 
@@ -203,6 +229,11 @@ func TestCompleteTodo_Success(t *testing.T) {
 	h.CompleteTodo(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.True(t, resp["success"].(bool))
+	assert.NotNil(t, resp["data"])
+	assert.Nil(t, resp["meta"])
 	repo.AssertExpectations(t)
 }
 
@@ -219,6 +250,11 @@ func TestSearchTodos_Success(t *testing.T) {
 	h.SearchTodos(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.True(t, resp["success"].(bool))
+	assert.NotNil(t, resp["data"])
+	assert.NotNil(t, resp["meta"])
 	repo.AssertExpectations(t)
 }
 
@@ -231,4 +267,9 @@ func TestSearchTodos_MissingQuery(t *testing.T) {
 	h.SearchTodos(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	assert.Equal(t, "VALIDATION_ERROR", resp["error"].(map[string]interface{})["code"])
 }

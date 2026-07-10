@@ -2,13 +2,14 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
-	appService "github.com/IDTS-LAB/go-codebase/internal/todo/application/service"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/application/dto"
+	appService "github.com/IDTS-LAB/go-codebase/internal/todo/application/service"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -47,12 +48,11 @@ func (h *Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := h.appService.CreateTodo(r.Context(), req)
 	if err != nil {
-		switch err {
-		case service.ErrInvalidTitle:
+		if errors.Is(err, service.ErrInvalidTitle) {
 			utils.RespondBadRequest(w, err.Error())
-		default:
-			utils.RespondInternalError(w, "failed to create todo")
+			return
 		}
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondCreated(w, resp)
@@ -83,10 +83,10 @@ func (h *Handler) ListTodos(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := h.appService.ListTodos(r.Context(), page, perPage)
 	if err != nil {
-		utils.RespondInternalError(w, "failed to list todos")
+		utils.MapError(w, err)
 		return
 	}
-	utils.RespondSuccess(w, resp)
+	utils.RespondPaginated(w, resp.Todos, page, perPage, resp.Total)
 }
 
 // GetTodo godoc
@@ -108,12 +108,11 @@ func (h *Handler) GetTodo(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := h.appService.GetTodo(r.Context(), id)
 	if err != nil {
-		switch err {
-		case service.ErrTodoNotFound:
+		if errors.Is(err, service.ErrTodoNotFound) {
 			utils.RespondNotFound(w, "todo not found")
-		default:
-			utils.RespondInternalError(w, "failed to get todo")
+			return
 		}
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondSuccess(w, resp)
@@ -149,12 +148,11 @@ func (h *Handler) UpdateTodo(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := h.appService.UpdateTodo(r.Context(), id, req)
 	if err != nil {
-		switch err {
-		case service.ErrTodoNotFound:
+		if errors.Is(err, service.ErrTodoNotFound) {
 			utils.RespondNotFound(w, "todo not found")
-		default:
-			utils.RespondInternalError(w, "failed to update todo")
+			return
 		}
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondSuccess(w, resp)
@@ -177,12 +175,11 @@ func (h *Handler) DeleteTodo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.appService.DeleteTodo(r.Context(), id); err != nil {
-		switch err {
-		case service.ErrTodoNotFound:
+		if errors.Is(err, service.ErrTodoNotFound) {
 			utils.RespondNotFound(w, "todo not found")
-		default:
-			utils.RespondInternalError(w, "failed to delete todo")
+			return
 		}
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondSuccess(w, nil)
@@ -207,13 +204,13 @@ func (h *Handler) CompleteTodo(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := h.appService.CompleteTodo(r.Context(), id)
 	if err != nil {
-		switch err {
-		case service.ErrTodoNotFound:
+		switch {
+		case errors.Is(err, service.ErrTodoNotFound):
 			utils.RespondNotFound(w, "todo not found")
-		case service.ErrTodoAlreadyDone:
+		case errors.Is(err, service.ErrTodoAlreadyDone):
 			utils.RespondConflict(w, "todo is already completed")
 		default:
-			utils.RespondInternalError(w, "failed to complete todo")
+			utils.MapError(w, err)
 		}
 		return
 	}
@@ -249,8 +246,8 @@ func (h *Handler) SearchTodos(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := h.appService.SearchTodos(r.Context(), queryStr, page, perPage)
 	if err != nil {
-		utils.RespondInternalError(w, "failed to search todos")
+		utils.MapError(w, err)
 		return
 	}
-	utils.RespondSuccess(w, resp)
+	utils.RespondPaginated(w, resp.Todos, page, perPage, resp.Total)
 }

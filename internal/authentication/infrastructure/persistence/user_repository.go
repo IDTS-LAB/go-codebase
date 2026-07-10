@@ -24,20 +24,20 @@ func NewUserRepository(db *sql.DB) repository.UserRepository {
 func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
 	q := sqlc.New(r.db)
 	err := q.CreateUser(ctx, sqlc.CreateUserParams{
-		ID:                  user.ID,
-		Email:               user.Email,
-		Password:            user.Password,
-		Name:                user.Name,
-		IsActive:            user.IsActive,
-		FailedLoginAttempts: int32(user.FailedLoginAttempts),
-		LockedUntil:         ptrToNullTime(user.LockedUntil),
-		EmailVerified:       sql.NullBool{Bool: user.EmailVerified, Valid: true},
-		EmailVerifyToken:    ptrToNullString(user.EmailVerifyToken),
-		EmailVerifyExpires:  ptrToNullTime(user.EmailVerifyExpires),
-		PasswordResetToken:  ptrToNullString(user.PasswordResetToken),
+		ID:                   user.ID,
+		Email:                user.Email,
+		Password:             user.Password,
+		Name:                 user.Name,
+		IsActive:             user.IsActive,
+		FailedLoginAttempts:  int32(user.FailedLoginAttempts),
+		LockedUntil:          ptrToNullTime(user.LockedUntil),
+		EmailVerified:        sql.NullBool{Bool: user.EmailVerified, Valid: true},
+		EmailVerifyToken:     ptrToNullString(user.EmailVerifyToken),
+		EmailVerifyExpires:   ptrToNullTime(user.EmailVerifyExpires),
+		PasswordResetToken:   ptrToNullString(user.PasswordResetToken),
 		PasswordResetExpires: ptrToNullTime(user.PasswordResetExpires),
-		CreatedAt:           user.CreatedAt,
-		UpdatedAt:           user.UpdatedAt,
+		CreatedAt:            user.CreatedAt,
+		UpdatedAt:            user.UpdatedAt,
 	})
 	if err != nil {
 		return fmt.Errorf("insert user: %w", err)
@@ -96,18 +96,18 @@ func (r *userRepository) GetByResetToken(ctx context.Context, token string) (*en
 func (r *userRepository) Update(ctx context.Context, user *entity.User) error {
 	q := sqlc.New(r.db)
 	rows, err := q.UpdateUser(ctx, sqlc.UpdateUserParams{
-		ID:                  user.ID,
-		Email:               user.Email,
-		Password:            user.Password,
-		Name:                user.Name,
-		IsActive:            user.IsActive,
-		UpdatedAt:           user.UpdatedAt,
-		FailedLoginAttempts: int32(user.FailedLoginAttempts),
-		LockedUntil:         ptrToNullTime(user.LockedUntil),
-		EmailVerified:       sql.NullBool{Bool: user.EmailVerified, Valid: true},
-		EmailVerifyToken:    ptrToNullString(user.EmailVerifyToken),
-		EmailVerifyExpires:  ptrToNullTime(user.EmailVerifyExpires),
-		PasswordResetToken:  ptrToNullString(user.PasswordResetToken),
+		ID:                   user.ID,
+		Email:                user.Email,
+		Password:             user.Password,
+		Name:                 user.Name,
+		IsActive:             user.IsActive,
+		UpdatedAt:            user.UpdatedAt,
+		FailedLoginAttempts:  int32(user.FailedLoginAttempts),
+		LockedUntil:          ptrToNullTime(user.LockedUntil),
+		EmailVerified:        sql.NullBool{Bool: user.EmailVerified, Valid: true},
+		EmailVerifyToken:     ptrToNullString(user.EmailVerifyToken),
+		EmailVerifyExpires:   ptrToNullTime(user.EmailVerifyExpires),
+		PasswordResetToken:   ptrToNullString(user.PasswordResetToken),
 		PasswordResetExpires: ptrToNullTime(user.PasswordResetExpires),
 	})
 	if err != nil {

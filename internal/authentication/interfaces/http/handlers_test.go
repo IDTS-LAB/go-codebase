@@ -167,6 +167,17 @@ func TestVerifyEmail_MissingToken(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected status 400, got %d", w.Code)
 	}
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp["success"].(bool) {
+		t.Error("expected success false")
+	}
+	if resp["data"] != nil {
+		t.Error("expected data null")
+	}
+	if resp["error"].(map[string]interface{})["code"] != "VALIDATION_ERROR" {
+		t.Errorf("expected VALIDATION_ERROR, got %v", resp["error"].(map[string]interface{})["code"])
+	}
 }
 
 func TestVerifyEmail_Success(t *testing.T) {
@@ -192,6 +203,18 @@ func TestVerifyEmail_Success(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", w.Code)
 	}
 
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	if !resp["success"].(bool) {
+		t.Error("expected success true")
+	}
+	if resp["data"] == nil {
+		t.Error("expected data not null")
+	}
+	if resp["meta"] != nil {
+		t.Error("expected meta null")
+	}
+
 	updated, _ := repo.GetByEmail(context.Background(), "verify@example.com")
 	if !updated.EmailVerified {
 		t.Error("user should be verified after request")
@@ -207,6 +230,17 @@ func TestVerifyEmail_InvalidToken(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected status 400, got %d", w.Code)
+	}
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp["success"].(bool) {
+		t.Error("expected success false")
+	}
+	if resp["data"] != nil {
+		t.Error("expected data null")
+	}
+	if resp["error"].(map[string]interface{})["code"] != "VALIDATION_ERROR" {
+		t.Errorf("expected VALIDATION_ERROR, got %v", resp["error"].(map[string]interface{})["code"])
 	}
 }
 
@@ -226,6 +260,17 @@ func TestForgotPassword_Success(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", w.Code)
 	}
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	if !resp["success"].(bool) {
+		t.Error("expected success true")
+	}
+	if resp["data"] == nil {
+		t.Error("expected data not null")
+	}
+	if resp["meta"] != nil {
+		t.Error("expected meta null")
+	}
 }
 
 func TestForgotPassword_InvalidBody(t *testing.T) {
@@ -238,6 +283,17 @@ func TestForgotPassword_InvalidBody(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected status 400, got %d", w.Code)
+	}
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp["success"].(bool) {
+		t.Error("expected success false")
+	}
+	if resp["data"] != nil {
+		t.Error("expected data null")
+	}
+	if resp["error"].(map[string]interface{})["code"] != "VALIDATION_ERROR" {
+		t.Errorf("expected VALIDATION_ERROR, got %v", resp["error"].(map[string]interface{})["code"])
 	}
 }
 
@@ -265,6 +321,18 @@ func TestResetPassword_Success(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", w.Code)
 	}
 
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	if !resp["success"].(bool) {
+		t.Error("expected success true")
+	}
+	if resp["data"] == nil {
+		t.Error("expected data not null")
+	}
+	if resp["meta"] != nil {
+		t.Error("expected meta null")
+	}
+
 	updated, _ := repo.GetByEmail(context.Background(), "reset@example.com")
 	if updated.PasswordResetToken != nil {
 		t.Error("reset token should be cleared")
@@ -281,6 +349,17 @@ func TestResetPassword_InvalidBody(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected status 400, got %d", w.Code)
+	}
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp["success"].(bool) {
+		t.Error("expected success false")
+	}
+	if resp["data"] != nil {
+		t.Error("expected data null")
+	}
+	if resp["error"].(map[string]interface{})["code"] != "VALIDATION_ERROR" {
+		t.Errorf("expected VALIDATION_ERROR, got %v", resp["error"].(map[string]interface{})["code"])
 	}
 }
 
@@ -299,5 +378,16 @@ func TestResendVerification_Success(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	if !resp["success"].(bool) {
+		t.Error("expected success true")
+	}
+	if resp["data"] == nil {
+		t.Error("expected data not null")
+	}
+	if resp["meta"] != nil {
+		t.Error("expected meta null")
 	}
 }

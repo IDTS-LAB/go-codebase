@@ -47,7 +47,7 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 	}
 	role, err := h.svc.CreateRole(r.Context(), req.Name, req.Description)
 	if err != nil {
-		utils.RespondConflict(w, "role already exists")
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondCreated(w, role)
@@ -74,10 +74,10 @@ func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
 	}
 	roles, total, err := h.svc.ListRoles(r.Context(), page, perPage)
 	if err != nil {
-		utils.RespondInternalError(w, "failed to list roles")
+		utils.MapError(w, err)
 		return
 	}
-	utils.RespondSuccess(w, dto.ListResponse{Items: roles, Total: total, Page: page, PerPage: perPage})
+	utils.RespondPaginated(w, roles, page, perPage, total)
 }
 
 // GetRole godoc
@@ -98,7 +98,7 @@ func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
 	}
 	role, err := h.svc.GetRole(r.Context(), id)
 	if err != nil {
-		utils.RespondNotFound(w, "role not found")
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondSuccess(w, role)
@@ -130,7 +130,7 @@ func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	}
 	role, err := h.svc.UpdateRole(r.Context(), id, req.Name, req.Description)
 	if err != nil {
-		utils.RespondNotFound(w, "role not found")
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondSuccess(w, role)
@@ -152,7 +152,7 @@ func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.DeleteRole(r.Context(), id); err != nil {
-		utils.RespondNotFound(w, "role not found")
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondSuccess(w, nil)
@@ -182,7 +182,7 @@ func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 	}
 	perm, err := h.svc.CreatePermission(r.Context(), req.Name, req.Description, req.Resource, req.Action)
 	if err != nil {
-		utils.RespondConflict(w, "permission already exists")
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondCreated(w, perm)
@@ -209,10 +209,10 @@ func (h *Handler) ListPermissions(w http.ResponseWriter, r *http.Request) {
 	}
 	perms, total, err := h.svc.ListPermissions(r.Context(), page, perPage)
 	if err != nil {
-		utils.RespondInternalError(w, "failed to list permissions")
+		utils.MapError(w, err)
 		return
 	}
-	utils.RespondSuccess(w, dto.ListResponse{Items: perms, Total: total, Page: page, PerPage: perPage})
+	utils.RespondPaginated(w, perms, page, perPage, total)
 }
 
 // GetPermission godoc
@@ -233,7 +233,7 @@ func (h *Handler) GetPermission(w http.ResponseWriter, r *http.Request) {
 	}
 	perm, err := h.svc.GetPermission(r.Context(), id)
 	if err != nil {
-		utils.RespondNotFound(w, "permission not found")
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondSuccess(w, perm)
@@ -265,7 +265,7 @@ func (h *Handler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
 	}
 	perm, err := h.svc.UpdatePermission(r.Context(), id, req.Name, req.Description, req.Resource, req.Action)
 	if err != nil {
-		utils.RespondNotFound(w, "permission not found")
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondSuccess(w, perm)
@@ -287,7 +287,7 @@ func (h *Handler) DeletePermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.DeletePermission(r.Context(), id); err != nil {
-		utils.RespondNotFound(w, "permission not found")
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondSuccess(w, nil)
@@ -316,7 +316,7 @@ func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.AssignRoleToUser(r.Context(), req.UserID, req.RoleID); err != nil {
-		utils.RespondInternalError(w, "failed to assign role")
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondSuccess(w, nil)
@@ -344,7 +344,7 @@ func (h *Handler) RemoveRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.RemoveRoleFromUser(r.Context(), userID, roleID); err != nil {
-		utils.RespondInternalError(w, "failed to remove role")
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondSuccess(w, nil)
@@ -368,7 +368,7 @@ func (h *Handler) GetUserRoles(w http.ResponseWriter, r *http.Request) {
 	}
 	roles, err := h.svc.GetUserRoles(r.Context(), userID)
 	if err != nil {
-		utils.RespondInternalError(w, "failed to get user roles")
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondSuccess(w, roles)
@@ -397,7 +397,7 @@ func (h *Handler) AssignPermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.AssignPermissionToRole(r.Context(), req.RoleID, req.PermissionID); err != nil {
-		utils.RespondInternalError(w, "failed to assign permission")
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondSuccess(w, nil)
@@ -425,7 +425,7 @@ func (h *Handler) RemovePermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.RemovePermissionFromRole(r.Context(), roleID, permID); err != nil {
-		utils.RespondInternalError(w, "failed to remove permission")
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondSuccess(w, nil)
@@ -449,7 +449,7 @@ func (h *Handler) GetRolePermissions(w http.ResponseWriter, r *http.Request) {
 	}
 	perms, err := h.svc.GetRolePermissions(r.Context(), roleID)
 	if err != nil {
-		utils.RespondInternalError(w, "failed to get role permissions")
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondSuccess(w, perms)
@@ -489,7 +489,7 @@ func (h *Handler) CheckPermission(w http.ResponseWriter, r *http.Request) {
 	}
 	allowed, err := h.svc.CheckPermission(r.Context(), uid, req.Resource, req.Action)
 	if err != nil {
-		utils.RespondInternalError(w, "failed to check permission")
+		utils.MapError(w, err)
 		return
 	}
 	utils.RespondSuccess(w, dto.CheckPermissionResponse{Allowed: allowed})

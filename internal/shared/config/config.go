@@ -75,11 +75,11 @@ type NATSConfig struct {
 
 // AuthConfig holds authentication and security settings.
 type AuthConfig struct {
-	JWTSecret         string
-	JWTExpiration     int
-	MaxLoginAttempts  int
-	LockoutDuration   int
-	TokenDenylist     bool
+	JWTSecret        string
+	JWTExpiration    int
+	MaxLoginAttempts int
+	LockoutDuration  int
+	TokenDenylist    bool
 }
 
 // RateLimitConfig holds rate limiting settings.
