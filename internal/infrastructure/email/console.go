@@ -1,17 +1,20 @@
 package email
 
 import (
-	"log"
+	"context"
+
+	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 )
 
 type ConsoleMailer struct {
 	from        string
 	fromName    string
 	frontendURL string
+	log         domain.Logger
 }
 
-func NewConsoleMailer(from, fromName, frontendURL string) *ConsoleMailer {
-	return &ConsoleMailer{from: from, fromName: fromName, frontendURL: frontendURL}
+func NewConsoleMailer(from, fromName, frontendURL string, log domain.Logger) *ConsoleMailer {
+	return &ConsoleMailer{from: from, fromName: fromName, frontendURL: frontendURL, log: log}
 }
 
 func (m *ConsoleMailer) SendVerification(to, name, token string) error {
@@ -20,7 +23,11 @@ func (m *ConsoleMailer) SendVerification(to, name, token string) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("[EMAIL] To: %s | Subject: Verify your email\n%s", to, content)
+	m.log.Info(context.Background(), "[EMAIL] verification",
+		domain.String("to", to),
+		domain.String("subject", "Verify your email"),
+		domain.String("content", content),
+	)
 	return nil
 }
 
@@ -30,7 +37,11 @@ func (m *ConsoleMailer) SendPasswordReset(to, name, token string) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("[EMAIL] To: %s | Subject: Reset your password\n%s", to, content)
+	m.log.Info(context.Background(), "[EMAIL] password reset",
+		domain.String("to", to),
+		domain.String("subject", "Reset your password"),
+		domain.String("content", content),
+	)
 	return nil
 }
 
@@ -39,7 +50,11 @@ func (m *ConsoleMailer) SendWelcome(to, name string) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("[EMAIL] To: %s | Subject: Welcome %s!\n%s", to, name, content)
+	m.log.Info(context.Background(), "[EMAIL] welcome",
+		domain.String("to", to),
+		domain.String("subject", "Welcome "+name+"!"),
+		domain.String("content", content),
+	)
 	return nil
 }
 
@@ -48,6 +63,10 @@ func (m *ConsoleMailer) SendInvite(to, name, inviterName string) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("[EMAIL] To: %s | Subject: %s invited you\n%s", to, inviterName, content)
+	m.log.Info(context.Background(), "[EMAIL] invite",
+		domain.String("to", to),
+		domain.String("subject", inviterName+" invited you"),
+		domain.String("content", content),
+	)
 	return nil
 }

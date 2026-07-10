@@ -1,27 +1,59 @@
 package email
 
 import (
-	"bytes"
+	"context"
 	"fmt"
-	"log"
-	"os"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/config"
 )
 
-func TestConsoleMailer(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr) // restore
+type capturingLogger struct {
+	mu      sync.Mutex
+	entries []string
+}
 
-	mailer := NewConsoleMailer("test@example.com", "Test App", "http://localhost:3000")
+func (l *capturingLogger) Info(_ context.Context, msg string, fields ...domain.Field) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var sb strings.Builder
+	sb.WriteString(msg)
+	for _, f := range fields {
+		sb.WriteString(" ")
+		sb.WriteString(f.Key)
+		sb.WriteString("=")
+		if s, ok := f.Value.(string); ok {
+			sb.WriteString(s)
+		} else if e, ok := f.Value.(error); ok {
+			sb.WriteString(e.Error())
+		}
+	}
+	l.entries = append(l.entries, sb.String())
+}
+
+func (l *capturingLogger) Debug(_ context.Context, _ string, _ ...domain.Field) {}
+func (l *capturingLogger) Warn(_ context.Context, _ string, _ ...domain.Field)   {}
+func (l *capturingLogger) Error(_ context.Context, _ string, _ ...domain.Field)  {}
+func (l *capturingLogger) Fatal(_ context.Context, _ string, _ ...domain.Field)  {}
+func (l *capturingLogger) With(_ ...domain.Field) domain.Logger                   { return l }
+
+func (l *capturingLogger) output() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return strings.Join(l.entries, "\n")
+}
+
+func TestConsoleMailer(t *testing.T) {
+	logger := &capturingLogger{}
+	mailer := NewConsoleMailer("test@example.com", "Test App", "http://localhost:3000", logger)
 
 	if err := mailer.SendVerification("user@test.com", "Test User", "abc123"); err != nil {
 		t.Errorf("SendVerification failed: %v", err)
 	}
-	output := buf.String()
+	output := logger.output()
 	if !strings.Contains(output, "user@test.com") {
 		t.Error("SendVerification should log recipient email")
 	}
@@ -29,11 +61,11 @@ func TestConsoleMailer(t *testing.T) {
 		t.Error("SendVerification should log the token")
 	}
 
-	buf.Reset()
+	logger.entries = nil
 	if err := mailer.SendPasswordReset("user@test.com", "Test User", "xyz789"); err != nil {
 		t.Errorf("SendPasswordReset failed: %v", err)
 	}
-	output = buf.String()
+	output = logger.output()
 	if !strings.Contains(output, "user@test.com") {
 		t.Error("SendPasswordReset should log recipient email")
 	}
@@ -41,11 +73,11 @@ func TestConsoleMailer(t *testing.T) {
 		t.Error("SendPasswordReset should log the token")
 	}
 
-	buf.Reset()
+	logger.entries = nil
 	if err := mailer.SendWelcome("user@test.com", "Test User"); err != nil {
 		t.Errorf("SendWelcome failed: %v", err)
 	}
-	output = buf.String()
+	output = logger.output()
 	if !strings.Contains(output, "user@test.com") {
 		t.Error("SendWelcome should log recipient email")
 	}
@@ -53,11 +85,11 @@ func TestConsoleMailer(t *testing.T) {
 		t.Error("SendWelcome should log the name")
 	}
 
-	buf.Reset()
+	logger.entries = nil
 	if err := mailer.SendInvite("user@test.com", "Test User", "Admin"); err != nil {
 		t.Errorf("SendInvite failed: %v", err)
 	}
-	output = buf.String()
+	output = logger.output()
 	if !strings.Contains(output, "user@test.com") {
 		t.Error("SendInvite should log recipient email")
 	}
@@ -67,6 +99,7 @@ func TestConsoleMailer(t *testing.T) {
 }
 
 func TestNewEmailer(t *testing.T) {
+	logger := &capturingLogger{}
 	tests := []struct {
 		name     string
 		provider string
@@ -89,7 +122,7 @@ func TestNewEmailer(t *testing.T) {
 			cfg.Email.SMTP.Port = 587
 			cfg.Email.SendGrid.APIKey = "test-key"
 
-			mailer := NewEmailer(cfg)
+			mailer := NewEmailer(cfg, logger)
 			if mailer == nil {
 				t.Fatal("NewEmailer returned nil")
 			}

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -89,7 +90,8 @@ func (s *AuthenticationService) Register(ctx context.Context, email, password, n
 		return nil, fmt.Errorf("generate verification token: %w", err)
 	}
 	expires := time.Now().Add(24 * time.Hour)
-	user.EmailVerifyToken = &token
+	hashed := hashToken(token)
+	user.EmailVerifyToken = &hashed
 	user.EmailVerifyExpires = &expires
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return nil, err
@@ -198,7 +200,7 @@ func (s *AuthenticationService) LogoutAll(ctx context.Context, userID uuid.UUID)
 }
 
 func (s *AuthenticationService) VerifyEmail(ctx context.Context, token string) error {
-	user, err := s.userRepo.GetByVerifyToken(ctx, token)
+	user, err := s.userRepo.GetByVerifyToken(ctx, hashToken(token))
 	if err != nil {
 		return ErrInvalidVerifyToken
 	}
@@ -228,7 +230,8 @@ func (s *AuthenticationService) ForgotPassword(ctx context.Context, email string
 		return err
 	}
 	expires := time.Now().Add(1 * time.Hour)
-	user.PasswordResetToken = &token
+	hashed := hashToken(token)
+	user.PasswordResetToken = &hashed
 	user.PasswordResetExpires = &expires
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return err
@@ -239,7 +242,7 @@ func (s *AuthenticationService) ForgotPassword(ctx context.Context, email string
 }
 
 func (s *AuthenticationService) ResetPassword(ctx context.Context, token, newPassword string) error {
-	user, err := s.userRepo.GetByResetToken(ctx, token)
+	user, err := s.userRepo.GetByResetToken(ctx, hashToken(token))
 	if err != nil {
 		return ErrInvalidResetToken
 	}
@@ -273,7 +276,8 @@ func (s *AuthenticationService) ResendVerification(ctx context.Context, email st
 		return err
 	}
 	expires := time.Now().Add(24 * time.Hour)
-	user.EmailVerifyToken = &token
+	hashed := hashToken(token)
+	user.EmailVerifyToken = &hashed
 	user.EmailVerifyExpires = &expires
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return err
@@ -294,4 +298,9 @@ func generateRefreshToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+func hashToken(token string) string {
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:])
 }

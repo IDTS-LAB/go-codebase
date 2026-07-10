@@ -260,8 +260,8 @@ func TestVerifyEmail_HappyPath(t *testing.T) {
 	mailer := newMockMailer()
 	svc := newTestService(repo, mailer)
 
-	user, _ := svc.Register(context.Background(), "verify@example.com", "password123", "User")
-	token := *user.EmailVerifyToken
+	_, _ = svc.Register(context.Background(), "verify@example.com", "password123", "User")
+	token := mailer.verifications[0].args[0]
 
 	err := svc.VerifyEmail(context.Background(), token)
 	if err != nil {
@@ -299,7 +299,8 @@ func TestVerifyEmail_ExpiredToken(t *testing.T) {
 	user.EmailVerifyExpires = &past
 	_ = repo.Update(context.Background(), user)
 
-	err := svc.VerifyEmail(context.Background(), *user.EmailVerifyToken)
+	rawToken := mailer.verifications[0].args[0]
+	err := svc.VerifyEmail(context.Background(), rawToken)
 	if err != ErrVerifyTokenExpired {
 		t.Errorf("expected ErrVerifyTokenExpired, got %v", err)
 	}
@@ -346,10 +347,9 @@ func TestResetPassword_HappyPath(t *testing.T) {
 	_, _ = svc.Register(context.Background(), "reset@example.com", "password123", "User")
 	_ = svc.ForgotPassword(context.Background(), "reset@example.com")
 
-	user, _ := repo.GetByEmail(context.Background(), "reset@example.com")
-	token := *user.PasswordResetToken
+	rawToken := mailer.resets[0].args[0]
 
-	err := svc.ResetPassword(context.Background(), token, "newpassword456")
+	err := svc.ResetPassword(context.Background(), rawToken, "newpassword456")
 	if err != nil {
 		t.Fatalf("ResetPassword failed: %v", err)
 	}
@@ -377,12 +377,16 @@ func TestResetPassword_ExpiredToken(t *testing.T) {
 	svc := newTestService(repo, mailer)
 
 	user, _ := svc.Register(context.Background(), "expiredreset@example.com", "password123", "User")
-	past := time.Now().Add(-1 * time.Hour)
-	user.PasswordResetToken = &[]string{"reset-token-expired"}[0]
-	user.PasswordResetExpires = &past
-	_ = repo.Update(context.Background(), user)
+	_ = user
+	_ = svc.ForgotPassword(context.Background(), "expiredreset@example.com")
+	rawToken := mailer.resets[len(mailer.resets)-1].args[0]
 
-	err := svc.ResetPassword(context.Background(), "reset-token-expired", "newpassword456")
+	stored, _ := repo.GetByEmail(context.Background(), "expiredreset@example.com")
+	past := time.Now().Add(-1 * time.Hour)
+	stored.PasswordResetExpires = &past
+	_ = repo.Update(context.Background(), stored)
+
+	err := svc.ResetPassword(context.Background(), rawToken, "newpassword456")
 	if err != ErrResetTokenExpired {
 		t.Errorf("expected ErrResetTokenExpired, got %v", err)
 	}
