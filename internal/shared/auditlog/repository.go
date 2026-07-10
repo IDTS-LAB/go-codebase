@@ -5,22 +5,25 @@ import (
 	"database/sql"
 	"encoding/json"
 	"time"
+
+	"github.com/IDTS-LAB/go-codebase/internal/shared/auditlog/sqlc"
+	"github.com/google/uuid"
 )
 
 type AuditLog struct {
-	ID           string     `json:"id"`
-	RequestID    string     `json:"request_id"`
-	UserID       *string    `json:"user_id,omitempty"`
-	UserEmail    *string    `json:"user_email,omitempty"`
-	Method       string     `json:"method"`
-	Path         string     `json:"path"`
-	StatusCode   int        `json:"status_code"`
-	DurationMs   int64      `json:"duration_ms"`
-	IP           string     `json:"ip"`
-	UserAgent    string     `json:"user_agent"`
-	RequestBody  *string    `json:"request_body,omitempty"`
-	ResponseSize int        `json:"response_size"`
-	CreatedAt    time.Time  `json:"created_at"`
+	ID           string    `json:"id"`
+	RequestID    string    `json:"request_id"`
+	UserID       *string   `json:"user_id,omitempty"`
+	UserEmail    *string   `json:"user_email,omitempty"`
+	Method       string    `json:"method"`
+	Path         string    `json:"path"`
+	StatusCode   int       `json:"status_code"`
+	DurationMs   int64     `json:"duration_ms"`
+	IP           string    `json:"ip"`
+	UserAgent    string    `json:"user_agent"`
+	RequestBody  *string   `json:"request_body,omitempty"`
+	ResponseSize int       `json:"response_size"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type ErrorLog struct {
@@ -51,23 +54,56 @@ func NewRepository(db *sql.DB) *Repository {
 }
 
 func (r *Repository) InsertAuditLog(ctx context.Context, log *AuditLog) error {
-	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO audit_logs (id, request_id, user_id, user_email, method, path, status_code, duration_ms, ip, user_agent, request_body, response_size, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-		log.ID, log.RequestID, log.UserID, log.UserEmail, log.Method, log.Path,
-		log.StatusCode, log.DurationMs, log.IP, log.UserAgent, log.RequestBody,
-		log.ResponseSize, log.CreatedAt,
-	)
-	return err
+	q := sqlc.New(r.db)
+	return q.InsertAuditLog(ctx, sqlc.InsertAuditLogParams{
+		ID:           uuid.MustParse(log.ID),
+		RequestID:    log.RequestID,
+		UserID:       ptrStringToNullUUID(log.UserID),
+		UserEmail:    ptrStringToNullString(log.UserEmail),
+		Method:       log.Method,
+		Path:         log.Path,
+		StatusCode:   int32(log.StatusCode),
+		DurationMs:   log.DurationMs,
+		Ip:           log.IP,
+		UserAgent:    log.UserAgent,
+		RequestBody:  ptrStringToNullString(log.RequestBody),
+		ResponseSize: int32(log.ResponseSize),
+		CreatedAt:    log.CreatedAt,
+	})
 }
 
 func (r *Repository) InsertErrorLog(ctx context.Context, log *ErrorLog) error {
-	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO error_logs (id, request_id, user_id, user_email, level, message, error, stack_trace, method, path, status_code, ip, user_agent, request_body, metadata, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
-		log.ID, log.RequestID, log.UserID, log.UserEmail, log.Level, log.Message,
-		log.Error, log.StackTrace, log.Method, log.Path, log.StatusCode,
-		log.IP, log.UserAgent, log.RequestBody, log.Metadata, log.CreatedAt,
-	)
-	return err
+	q := sqlc.New(r.db)
+	return q.InsertErrorLog(ctx, sqlc.InsertErrorLogParams{
+		ID:          uuid.MustParse(log.ID),
+		RequestID:   log.RequestID,
+		UserID:      ptrStringToNullUUID(log.UserID),
+		UserEmail:   ptrStringToNullString(log.UserEmail),
+		Level:       log.Level,
+		Message:     log.Message,
+		Error:       log.Error,
+		StackTrace:  log.StackTrace,
+		Method:      log.Method,
+		Path:        log.Path,
+		StatusCode:  int32(log.StatusCode),
+		Ip:          log.IP,
+		UserAgent:   log.UserAgent,
+		RequestBody: ptrStringToNullString(log.RequestBody),
+		Column15: log.Metadata,
+		CreatedAt:   log.CreatedAt,
+	})
+}
+
+func ptrStringToNullString(s *string) sql.NullString {
+	if s == nil {
+		return sql.NullString{Valid: false}
+	}
+	return sql.NullString{String: *s, Valid: true}
+}
+
+func ptrStringToNullUUID(s *string) uuid.NullUUID {
+	if s == nil {
+		return uuid.NullUUID{Valid: false}
+	}
+	return uuid.NullUUID{UUID: uuid.MustParse(*s), Valid: true}
 }
