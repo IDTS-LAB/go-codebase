@@ -51,7 +51,7 @@ internal/
     shared/                  # Shared kernel (cross-module)
         config/              # Koanf configuration loading
         database/            # PostgreSQL connection, sqlc, goose
-        events/              # EventBus interface + InMemoryEventBus + Fx module
+        events/              # EventBus interface + InMemoryEventBus + LoggingEventBus + Fx module
         middleware/           # HTTP middleware
             recovery.go      # Panic recovery
             request_id.go    # Request ID propagation

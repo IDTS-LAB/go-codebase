@@ -96,6 +96,10 @@ Services publish domain events to an `EventBus` interface (in-memory synchronous
 
 Flow: `Service → EventBus.Publish() → EmailHandler → domain.Emailer.Send*()`
 
+### Event Error Handling
+
+A `LoggingEventBus` decorator wraps the concrete bus and logs every publish failure through `domain.Logger`. Event handlers return errors instead of swallowing them, so mailer failures (SMTP down, SendGrid error, etc.) are recorded without breaking the originating HTTP request. Services discard the returned publish error after the decorator has logged it, keeping side effects best-effort.
+
 ### API Response Format
 
 All HTTP responses use a unified envelope:
