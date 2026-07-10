@@ -35,7 +35,6 @@ var Module = fx.Module("todo",
 		appService.NewTodoAppService,
 
 		// Events
-		events.NewEventBus,
 		eventbus.NewTodoEventHandler,
 
 		// Interface
@@ -43,7 +42,7 @@ var Module = fx.Module("todo",
 	),
 
 	fx.Invoke(
-		func(bus *events.EventBus, eh *eventbus.TodoEventHandler) {
+		func(bus events.EventBus, eh *eventbus.TodoEventHandler) {
 			eh.Register(bus)
 		},
 	),

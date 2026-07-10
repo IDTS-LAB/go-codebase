@@ -16,7 +16,7 @@ func NewTodoEventHandler(log domain.Logger) *TodoEventHandler {
 	return &TodoEventHandler{log: log}
 }
 
-func (h *TodoEventHandler) Register(bus *events.EventBus) {
+func (h *TodoEventHandler) Register(bus events.EventBus) {
 	bus.Subscribe(event.TodoCreatedEvent, h.onCreated)
 	bus.Subscribe(event.TodoUpdatedEvent, h.onUpdated)
 	bus.Subscribe(event.TodoCompletedEvent, h.onCompleted)
