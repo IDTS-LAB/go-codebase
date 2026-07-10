@@ -2,6 +2,7 @@ package eventbus
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/event"
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
@@ -10,11 +11,10 @@ import (
 
 type EmailHandler struct {
 	mailer domain.Emailer
-	log    domain.Logger
 }
 
-func NewEmailHandler(mailer domain.Emailer, log domain.Logger) *EmailHandler {
-	return &EmailHandler{mailer: mailer, log: log}
+func NewEmailHandler(mailer domain.Emailer) *EmailHandler {
+	return &EmailHandler{mailer: mailer}
 }
 
 func (h *EmailHandler) Register(bus events.EventBus) {
@@ -26,32 +26,23 @@ func (h *EmailHandler) Register(bus events.EventBus) {
 func (h *EmailHandler) onUserRegistered(ctx context.Context, e events.Event) error {
 	payload, ok := e.Payload.(event.UserRegistered)
 	if !ok {
-		return nil
+		return fmt.Errorf("invalid payload type for %s", e.Type)
 	}
-	if err := h.mailer.SendVerification(payload.Email, payload.Name, payload.VerificationToken); err != nil {
-		h.log.Error(ctx, "failed to send verification email", domain.Error(err))
-	}
-	return nil
+	return h.mailer.SendVerification(payload.Email, payload.Name, payload.VerificationToken)
 }
 
 func (h *EmailHandler) onEmailVerified(ctx context.Context, e events.Event) error {
 	payload, ok := e.Payload.(event.EmailVerified)
 	if !ok {
-		return nil
+		return fmt.Errorf("invalid payload type for %s", e.Type)
 	}
-	if err := h.mailer.SendWelcome(payload.Email, payload.Name); err != nil {
-		h.log.Error(ctx, "failed to send welcome email", domain.Error(err))
-	}
-	return nil
+	return h.mailer.SendWelcome(payload.Email, payload.Name)
 }
 
 func (h *EmailHandler) onPasswordResetRequested(ctx context.Context, e events.Event) error {
 	payload, ok := e.Payload.(event.PasswordResetRequested)
 	if !ok {
-		return nil
+		return fmt.Errorf("invalid payload type for %s", e.Type)
 	}
-	if err := h.mailer.SendPasswordReset(payload.Email, payload.Name, payload.ResetToken); err != nil {
-		h.log.Error(ctx, "failed to send password reset email", domain.Error(err))
-	}
-	return nil
+	return h.mailer.SendPasswordReset(payload.Email, payload.Name, payload.ResetToken)
 }

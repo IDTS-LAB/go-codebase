@@ -306,7 +306,7 @@ func (s *AuthenticationService) ResendVerification(ctx context.Context, email st
 		return err
 	}
 
-	return s.bus.Publish(ctx, events.Event{
+	_ = s.bus.Publish(ctx, events.Event{
 		Type: event.UserRegisteredEvent,
 		Payload: event.UserRegistered{
 			Email:             user.Email,
@@ -314,6 +314,7 @@ func (s *AuthenticationService) ResendVerification(ctx context.Context, email st
 			VerificationToken: token,
 		},
 	})
+	return nil
 }
 
 type TokenPair struct {
