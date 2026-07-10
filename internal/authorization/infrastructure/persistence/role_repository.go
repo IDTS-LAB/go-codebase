@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/entity"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/repository"
+	"github.com/IDTS-LAB/go-codebase/internal/authorization/infrastructure/persistence/sqlc"
+	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/google/uuid"
 )
 
@@ -19,8 +22,14 @@ func NewRoleRepository(db *sql.DB) repository.RoleRepository {
 }
 
 func (r *roleRepository) Create(ctx context.Context, role *entity.Role) error {
-	query := `INSERT INTO roles (id, name, description, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)`
-	_, err := r.db.ExecContext(ctx, query, role.ID, role.Name, role.Description, role.CreatedAt, role.UpdatedAt)
+	q := sqlc.New(r.db)
+	err := q.CreateRole(ctx, sqlc.CreateRoleParams{
+		ID:          role.ID,
+		Name:        role.Name,
+		Description: role.Description,
+		CreatedAt:   role.CreatedAt,
+		UpdatedAt:   role.UpdatedAt,
+	})
 	if err != nil {
 		return fmt.Errorf("insert role: %w", err)
 	}
@@ -28,62 +37,63 @@ func (r *roleRepository) Create(ctx context.Context, role *entity.Role) error {
 }
 
 func (r *roleRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Role, error) {
-	query := `SELECT id, name, description, created_at, updated_at, deleted_at FROM roles WHERE id = $1 AND deleted_at IS NULL`
-	role := &entity.Role{}
-	err := r.db.QueryRowContext(ctx, query, id).Scan(&role.ID, &role.Name, &role.Description, &role.CreatedAt, &role.UpdatedAt, &role.DeletedAt)
+	q := sqlc.New(r.db)
+	row, err := q.GetRoleByID(ctx, id)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("role not found")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get role: %w", err)
 	}
-	return role, nil
+	return mapSqlcRoleToEntity(row), nil
 }
 
 func (r *roleRepository) GetByName(ctx context.Context, name string) (*entity.Role, error) {
-	query := `SELECT id, name, description, created_at, updated_at, deleted_at FROM roles WHERE name = $1 AND deleted_at IS NULL`
-	role := &entity.Role{}
-	err := r.db.QueryRowContext(ctx, query, name).Scan(&role.ID, &role.Name, &role.Description, &role.CreatedAt, &role.UpdatedAt, &role.DeletedAt)
+	q := sqlc.New(r.db)
+	row, err := q.GetRoleByName(ctx, name)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("role not found")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get role by name: %w", err)
 	}
-	return role, nil
+	return mapSqlcRoleToEntity(row), nil
 }
 
 func (r *roleRepository) GetAll(ctx context.Context, offset, limit int) ([]*entity.Role, int, error) {
-	var total int
-	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM roles WHERE deleted_at IS NULL`).Scan(&total); err != nil {
+	q := sqlc.New(r.db)
+
+	total, err := q.CountRoles(ctx)
+	if err != nil {
 		return nil, 0, fmt.Errorf("count roles: %w", err)
 	}
 
-	query := `SELECT id, name, description, created_at, updated_at, deleted_at FROM roles WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2`
-	rows, err := r.db.QueryContext(ctx, query, limit, offset)
+	rows, err := q.ListRoles(ctx, sqlc.ListRolesParams{
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("query roles: %w", err)
 	}
-	defer rows.Close()
 
-	var roles []*entity.Role
-	for rows.Next() {
-		role := &entity.Role{}
-		if err := rows.Scan(&role.ID, &role.Name, &role.Description, &role.CreatedAt, &role.UpdatedAt, &role.DeletedAt); err != nil {
-			return nil, 0, fmt.Errorf("scan role: %w", err)
-		}
-		roles = append(roles, role)
+	roles := make([]*entity.Role, len(rows))
+	for i, row := range rows {
+		roles[i] = mapSqlcRoleToEntity(row)
 	}
-	return roles, total, nil
+	return roles, int(total), nil
 }
 
 func (r *roleRepository) Update(ctx context.Context, role *entity.Role) error {
-	query := `UPDATE roles SET name = $2, description = $3, updated_at = $4 WHERE id = $1 AND deleted_at IS NULL`
-	result, err := r.db.ExecContext(ctx, query, role.ID, role.Name, role.Description, role.UpdatedAt)
+	q := sqlc.New(r.db)
+	rows, err := q.UpdateRole(ctx, sqlc.UpdateRoleParams{
+		ID:          role.ID,
+		Name:        role.Name,
+		Description: role.Description,
+		UpdatedAt:   role.UpdatedAt,
+	})
 	if err != nil {
 		return fmt.Errorf("update role: %w", err)
 	}
-	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		return fmt.Errorf("role not found")
 	}
@@ -91,14 +101,33 @@ func (r *roleRepository) Update(ctx context.Context, role *entity.Role) error {
 }
 
 func (r *roleRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	query := `UPDATE roles SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
-	result, err := r.db.ExecContext(ctx, query, id)
+	q := sqlc.New(r.db)
+	rows, err := q.DeleteRole(ctx, id)
 	if err != nil {
 		return fmt.Errorf("delete role: %w", err)
 	}
-	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		return fmt.Errorf("role not found")
+	}
+	return nil
+}
+
+func mapSqlcRoleToEntity(row sqlc.Role) *entity.Role {
+	return &entity.Role{
+		Entity: domain.Entity{
+			ID:        row.ID,
+			CreatedAt: row.CreatedAt,
+			UpdatedAt: row.UpdatedAt,
+			DeletedAt: nullTimeToPtr(row.DeletedAt),
+		},
+		Name:        row.Name,
+		Description: row.Description,
+	}
+}
+
+func nullTimeToPtr(nt sql.NullTime) *time.Time {
+	if nt.Valid {
+		return &nt.Time
 	}
 	return nil
 }
