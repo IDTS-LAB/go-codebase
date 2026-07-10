@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/IDTS-LAB/go-codebase/internal/authentication"
+	authEventBus "github.com/IDTS-LAB/go-codebase/internal/authentication/infrastructure/eventbus"
 	authHTTP "github.com/IDTS-LAB/go-codebase/internal/authentication/interfaces/http"
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/application/service"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization"
@@ -22,6 +23,7 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/logger"
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/messaging"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/auditlog"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/events"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/config"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/database"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
@@ -69,6 +71,7 @@ func main() {
 		email.Module,
 
 		// Modules
+		events.Module,
 		authentication.Module,
 		authorization.Module,
 		todo.Module,
@@ -76,6 +79,11 @@ func main() {
 
 		// Shared
 		fx.Provide(auditlog.NewRepository),
+
+		// Event handlers
+		fx.Invoke(func(bus events.EventBus, eh *authEventBus.EmailHandler) {
+			eh.Register(bus)
+		}),
 
 		// Denylist helper
 		fx.Invoke(func(authSvc *service.AuthenticationService, rdb *redis.Client, cfg *config.Config) {
