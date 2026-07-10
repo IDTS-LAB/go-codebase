@@ -9,8 +9,17 @@ cmd/
 configs/                     # Configuration files
     config.yaml
 
+.github/                     # GitHub Actions workflows
+    workflows/
+        ci.yml                 # CI pipeline
+        cd.yml                 # CD pipeline
+
 deployments/                 # Deployment configs
     prometheus.yml
+
+k8s/                         # Kubernetes manifests
+    base/                    # Base Kustomize resources
+    overlays/                # Environment overlays (staging, production)
 
 docs/                        # Documentation
     README.md

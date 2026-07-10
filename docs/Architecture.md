@@ -100,6 +100,16 @@ Flow: `Service → EventBus.Publish() → EmailHandler → domain.Emailer.Send*(
 
 A `LoggingEventBus` decorator wraps the concrete bus and logs every publish failure through `domain.Logger`. Event handlers return errors instead of swallowing them, so mailer failures (SMTP down, SendGrid error, etc.) are recorded without breaking the originating HTTP request. Services discard the returned publish error after the decorator has logged it, keeping side effects best-effort.
 
+### OpenTelemetry Tracing
+
+Every HTTP request gets an OpenTelemetry span via a Chi middleware. The middleware:
+- Extracts incoming W3C trace context (`traceparent`/`baggage` headers)
+- Starts a span named `<METHOD> <path>`
+- Records the response status code
+- Marks the span as error for 4xx/5xx responses
+
+The `ZapLogger` extracts `trace_id` and `span_id` from the context and attaches them to every log entry, so logs and traces are correlated. Panics and 5xx errors are recorded as exceptions on the current span.
+
 ### API Response Format
 
 All HTTP responses use a unified envelope:

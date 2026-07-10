@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: go-codebase-production
+
+resources:
+  - ../../base
+
+namePrefix: production-
+
+replicas:
+  - name: go-codebase
+    count: 3
+
+images:
+  - name: ghcr.io/idts-lab/go-codebase
+    newTag: v1.0.0
+
+patches:
+  - target:
+      kind: Ingress
+      name: go-codebase
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: go-codebase.example.com
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: go-codebase.example.com
+      - op: replace
+        path: /spec/tls/0/secretName
+        value: production-go-codebase-tls

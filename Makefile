@@ -44,6 +44,15 @@ docker-down:
 docker-build:
 	docker compose build
 
+docker-prod-up:
+	docker compose -f docker-compose.prod.yml up -d
+
+docker-prod-down:
+	docker compose -f docker-compose.prod.yml down
+
+docker-prod-migrate:
+	docker compose -f docker-compose.prod.yml --profile migrate run --rm migrate
+
 clean:
 	rm -rf $(BUILD_DIR) coverage.out coverage.html
 

@@ -1,0 +1,114 @@
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/idts-lab/go-codebase:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - APP_ENV=production
+      - SERVER_PORT=8080
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME:-go_codebase}
+      - DB_SSLMODE=${DB_SSLMODE:-disable}
+      - REDIS_ADDR=${REDIS_ADDR:-redis:6379}
+      - NATS_URL=${NATS_URL:-nats://nats:4222}
+      - JWT_SECRET=${JWT_SECRET}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-go-codebase}
+      - OTEL_EXPORTER_ENDPOINT=${OTEL_EXPORTER_ENDPOINT:-}
+      - OTEL_SAMPLE_RATE=${OTEL_SAMPLE_RATE:-1.0}
+      - EMAIL_PROVIDER=${EMAIL_PROVIDER:-console}
+      - EMAIL_FROM=${EMAIL_FROM:-no-reply@example.com}
+      - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-App}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USERNAME=${SMTP_USERNAME:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_USE_TLS=${SMTP_USE_TLS:-true}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    networks:
+      - app-network
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-go_codebase}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  nats:
+    image: nats:2-alpine
+    command: ["--http_port", "8222"]
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  migrate:
+    image: ghcr.io/idts-lab/go-codebase:latest
+    command: ["sh", "-c", "sleep 5 && goose -dir migrations up"]
+    environment:
+      - GOOSE_DRIVER=postgres
+      - GOOSE_DBSTRING=postgres://${DB_USER:-postgres}:${DB_PASSWORD}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${DB_NAME:-go_codebase}?sslmode=${DB_SSLMODE:-disable}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: on-failure
+    profiles:
+      - migrate
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  app-network:
+    driver: bridge

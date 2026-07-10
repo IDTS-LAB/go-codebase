@@ -44,7 +44,7 @@ The server starts at `http://localhost:8080`.
 | Cache | Redis |
 | Messaging | NATS |
 | Events | In-memory EventBus (interface; RabbitMQ/Kafka-ready) |
-| Tracing | OpenTelemetry |
+| Tracing | OpenTelemetry (OTLP HTTP, W3C propagation) |
 | Docs | Swagger (swaggo/swag) |
 | Testing | Testify + GoMock |
 | Container | Docker + Docker Compose |
@@ -59,6 +59,7 @@ The server starts at `http://localhost:8080`.
 - **Loosely Coupled** - Infrastructure implementations behind interfaces, swappable via DI
 - **Event-Driven** - Domain events decouple side effects (e.g., email sending) from core business logic
 - **Unified API** - Consistent response envelope and centralized error handling across all endpoints
+- **OpenTelemetry** - Distributed tracing with trace/span IDs attached to every log entry
 
 ## API
 
@@ -188,11 +189,19 @@ All API responses share a unified envelope:
 }
 ```
 
-See [docs/API.md](docs/API.md) for the full list of error codes.
+All logs include `trace_id` and `span_id` extracted from the OpenTelemetry context. See [docs/API.md](docs/API.md) for the full list of error codes.
 
 ## Event-Driven Email
 
 Email sending is decoupled from the authentication service through domain events. The service publishes `UserRegistered`, `EmailVerified`, and `PasswordResetRequested` events; an `EmailHandler` subscribes and calls the configured mailer (SMTP, SendGrid, or console). The `EventBus` is interface-based so an async adapter (RabbitMQ, Kafka, etc.) can be swapped in without changing services or handlers.
+
+## CI/CD
+
+- **GitHub Actions CI** — lint, test (with PostgreSQL/Redis), build, and Docker image build on every push/PR
+- **GitHub Actions CD** — build and push Docker image to GHCR, deploy to staging on `main`, deploy to production on version tags
+- **Kubernetes** — Kustomize manifests in `k8s/base/` with staging/production overlays
+
+See [Deployment](docs/Deployment.md) for details.
 
 ## Documentation
 
