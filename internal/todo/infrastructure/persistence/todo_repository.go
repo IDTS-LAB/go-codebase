@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
+	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/entity"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/repository"
+	"github.com/IDTS-LAB/go-codebase/internal/todo/infrastructure/persistence/sqlc"
 	"github.com/google/uuid"
 )
 
@@ -19,18 +22,15 @@ func NewTodoRepository(db *sql.DB) repository.TodoRepository {
 }
 
 func (r *todoRepository) Create(ctx context.Context, todo *entity.Todo) error {
-	query := `
-		INSERT INTO todos (id, title, description, completed, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6)`
-
-	_, err := r.db.ExecContext(ctx, query,
-		todo.ID,
-		todo.Title,
-		todo.Description,
-		todo.Completed,
-		todo.CreatedAt,
-		todo.UpdatedAt,
-	)
+	q := sqlc.New(r.db)
+	err := q.CreateTodo(ctx, sqlc.CreateTodoParams{
+		ID:          todo.ID,
+		Title:       todo.Title,
+		Description: todo.Description,
+		Completed:   todo.Completed,
+		CreatedAt:   todo.CreatedAt,
+		UpdatedAt:   todo.UpdatedAt,
+	})
 	if err != nil {
 		return fmt.Errorf("insert todo: %w", err)
 	}
@@ -38,89 +38,51 @@ func (r *todoRepository) Create(ctx context.Context, todo *entity.Todo) error {
 }
 
 func (r *todoRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Todo, error) {
-	query := `
-		SELECT id, title, description, completed, created_at, updated_at, deleted_at
-		FROM todos
-		WHERE id = $1 AND deleted_at IS NULL`
-
-	todo := &entity.Todo{}
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&todo.ID,
-		&todo.Title,
-		&todo.Description,
-		&todo.Completed,
-		&todo.CreatedAt,
-		&todo.UpdatedAt,
-		&todo.DeletedAt,
-	)
+	q := sqlc.New(r.db)
+	row, err := q.GetTodoByID(ctx, id)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("todo not found")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get todo: %w", err)
 	}
-	return todo, nil
+	return mapSqlcTodoToEntity(row), nil
 }
 
 func (r *todoRepository) GetAll(ctx context.Context, offset, limit int) ([]*entity.Todo, int, error) {
-	countQuery := `SELECT COUNT(*) FROM todos WHERE deleted_at IS NULL`
-	var total int
-	if err := r.db.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+	q := sqlc.New(r.db)
+
+	total, err := q.CountTodos(ctx)
+	if err != nil {
 		return nil, 0, fmt.Errorf("count todos: %w", err)
 	}
 
-	query := `
-		SELECT id, title, description, completed, created_at, updated_at, deleted_at
-		FROM todos
-		WHERE deleted_at IS NULL
-		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2`
-
-	rows, err := r.db.QueryContext(ctx, query, limit, offset)
+	rows, err := q.ListTodos(ctx, sqlc.ListTodosParams{
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("query todos: %w", err)
 	}
-	defer rows.Close()
 
-	var todos []*entity.Todo
-	for rows.Next() {
-		todo := &entity.Todo{}
-		if err := rows.Scan(
-			&todo.ID,
-			&todo.Title,
-			&todo.Description,
-			&todo.Completed,
-			&todo.CreatedAt,
-			&todo.UpdatedAt,
-			&todo.DeletedAt,
-		); err != nil {
-			return nil, 0, fmt.Errorf("scan todo: %w", err)
-		}
-		todos = append(todos, todo)
+	todos := make([]*entity.Todo, len(rows))
+	for i, row := range rows {
+		todos[i] = mapSqlcTodoToEntity(row)
 	}
-	return todos, total, nil
+	return todos, int(total), nil
 }
 
 func (r *todoRepository) Update(ctx context.Context, todo *entity.Todo) error {
-	query := `
-		UPDATE todos
-		SET title = $2, description = $3, completed = $4, updated_at = $5
-		WHERE id = $1 AND deleted_at IS NULL`
-
-	result, err := r.db.ExecContext(ctx, query,
-		todo.ID,
-		todo.Title,
-		todo.Description,
-		todo.Completed,
-		todo.UpdatedAt,
-	)
+	q := sqlc.New(r.db)
+	rows, err := q.UpdateTodo(ctx, sqlc.UpdateTodoParams{
+		ID:          todo.ID,
+		Title:       todo.Title,
+		Description: todo.Description,
+		Completed:   todo.Completed,
+		UpdatedAt:   todo.UpdatedAt,
+	})
 	if err != nil {
 		return fmt.Errorf("update todo: %w", err)
-	}
-
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("rows affected: %w", err)
 	}
 	if rows == 0 {
 		return fmt.Errorf("todo not found")
@@ -129,14 +91,10 @@ func (r *todoRepository) Update(ctx context.Context, todo *entity.Todo) error {
 }
 
 func (r *todoRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	query := `UPDATE todos SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
-	result, err := r.db.ExecContext(ctx, query, id)
+	q := sqlc.New(r.db)
+	rows, err := q.SoftDeleteTodo(ctx, id)
 	if err != nil {
 		return fmt.Errorf("delete todo: %w", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("rows affected: %w", err)
 	}
 	if rows == 0 {
 		return fmt.Errorf("todo not found")
@@ -145,42 +103,47 @@ func (r *todoRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (r *todoRepository) Search(ctx context.Context, query string, offset, limit int) ([]*entity.Todo, int, error) {
-	searchPattern := "%" + query + "%"
+	q := sqlc.New(r.db)
+	searchPattern := sql.NullString{String: "%" + query + "%", Valid: true}
 
-	countQuery := `SELECT COUNT(*) FROM todos WHERE deleted_at IS NULL AND (title ILIKE $1 OR description ILIKE $1)`
-	var total int
-	if err := r.db.QueryRowContext(ctx, countQuery, searchPattern).Scan(&total); err != nil {
+	total, err := q.CountSearchTodos(ctx, searchPattern)
+	if err != nil {
 		return nil, 0, fmt.Errorf("count search results: %w", err)
 	}
 
-	sqlQuery := `
-		SELECT id, title, description, completed, created_at, updated_at, deleted_at
-		FROM todos
-		WHERE deleted_at IS NULL AND (title ILIKE $1 OR description ILIKE $1)
-		ORDER BY created_at DESC
-		LIMIT $2 OFFSET $3`
-
-	rows, err := r.db.QueryContext(ctx, sqlQuery, searchPattern, limit, offset)
+	rows, err := q.SearchTodos(ctx, sqlc.SearchTodosParams{
+		Column1: searchPattern,
+		Limit:   int32(limit),
+		Offset:  int32(offset),
+	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("search todos: %w", err)
 	}
-	defer rows.Close()
 
-	var todos []*entity.Todo
-	for rows.Next() {
-		todo := &entity.Todo{}
-		if err := rows.Scan(
-			&todo.ID,
-			&todo.Title,
-			&todo.Description,
-			&todo.Completed,
-			&todo.CreatedAt,
-			&todo.UpdatedAt,
-			&todo.DeletedAt,
-		); err != nil {
-			return nil, 0, fmt.Errorf("scan todo: %w", err)
-		}
-		todos = append(todos, todo)
+	todos := make([]*entity.Todo, len(rows))
+	for i, row := range rows {
+		todos[i] = mapSqlcTodoToEntity(row)
 	}
-	return todos, total, nil
+	return todos, int(total), nil
+}
+
+func mapSqlcTodoToEntity(row sqlc.Todo) *entity.Todo {
+	return &entity.Todo{
+		Entity: domain.Entity{
+			ID:        row.ID,
+			CreatedAt: row.CreatedAt,
+			UpdatedAt: row.UpdatedAt,
+			DeletedAt: nullTimeToPtr(row.DeletedAt),
+		},
+		Title:       row.Title,
+		Description: row.Description,
+		Completed:   row.Completed,
+	}
+}
+
+func nullTimeToPtr(nt sql.NullTime) *time.Time {
+	if nt.Valid {
+		return &nt.Time
+	}
+	return nil
 }
