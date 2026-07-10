@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -38,7 +39,7 @@ func RateLimit(rdb *redis.Client, limit int, window time.Duration) func(http.Han
 
 			if count > int64(limit) {
 				w.Header().Set("Retry-After", strconv.Itoa(int(ttl.Seconds())+1))
-				http.Error(w, `{"success":false,"error":{"code":"RATE_LIMITED","message":"too many requests"}}`, http.StatusTooManyRequests)
+				utils.RespondError(w, http.StatusTooManyRequests, "RATE_LIMITED", "too many requests")
 				return
 			}
 

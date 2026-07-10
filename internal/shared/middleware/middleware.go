@@ -13,6 +13,7 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/auditlog"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/config"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/google/uuid"
 	"github.com/rs/cors"
 )
@@ -40,7 +41,7 @@ func ErrorHandler(log domain.Logger, errorRepo *auditlog.Repository) func(http.H
 					persistError(r, errorRepo, log, http.StatusInternalServerError,
 						"panic recovered", fmt.Sprintf("%v", err), stack)
 
-					http.Error(w, `{"success":false,"error":{"code":"INTERNAL_ERROR","message":"internal server error"}}`, http.StatusInternalServerError)
+					utils.RespondInternalError(w, "internal server error")
 				}
 			}()
 			next.ServeHTTP(w, r)
@@ -172,7 +173,7 @@ func Authentication(tokenSvc domain.TokenService) func(http.Handler) http.Handle
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := r.Header.Get("Authorization")
 			if tokenStr == "" {
-				http.Error(w, `{"success":false,"error":{"code":"UNAUTHORIZED","message":"missing token"}}`, http.StatusUnauthorized)
+				utils.RespondUnauthorized(w, "missing token")
 				return
 			}
 
@@ -182,7 +183,7 @@ func Authentication(tokenSvc domain.TokenService) func(http.Handler) http.Handle
 
 			claims, err := tokenSvc.ValidateToken(tokenStr)
 			if err != nil {
-				http.Error(w, `{"success":false,"error":{"code":"UNAUTHORIZED","message":"invalid token"}}`, http.StatusUnauthorized)
+				utils.RespondUnauthorized(w, "invalid token")
 				return
 			}
 
@@ -199,7 +200,7 @@ func AuthenticationWithDenylist(tokenSvc domain.TokenService, denylistChecker fu
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := r.Header.Get("Authorization")
 			if tokenStr == "" {
-				http.Error(w, `{"success":false,"error":{"code":"UNAUTHORIZED","message":"missing token"}}`, http.StatusUnauthorized)
+				utils.RespondUnauthorized(w, "missing token")
 				return
 			}
 
@@ -209,12 +210,12 @@ func AuthenticationWithDenylist(tokenSvc domain.TokenService, denylistChecker fu
 
 			claims, err := tokenSvc.ValidateToken(tokenStr)
 			if err != nil {
-				http.Error(w, `{"success":false,"error":{"code":"UNAUTHORIZED","message":"invalid token"}}`, http.StatusUnauthorized)
+				utils.RespondUnauthorized(w, "invalid token")
 				return
 			}
 
 			if claims.JTI != "" && denylistChecker(r.Context(), claims.JTI) {
-				http.Error(w, `{"success":false,"error":{"code":"UNAUTHORIZED","message":"token has been revoked"}}`, http.StatusUnauthorized)
+				utils.RespondUnauthorized(w, "token has been revoked")
 				return
 			}
 
@@ -284,24 +285,24 @@ func Authorization(authorizer Authorizer, resource, action string) func(http.Han
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			userID := GetUserID(r.Context())
 			if userID == "" {
-				http.Error(w, `{"success":false,"error":{"code":"UNAUTHORIZED","message":"user not authenticated"}}`, http.StatusUnauthorized)
+				utils.RespondUnauthorized(w, "user not authenticated")
 				return
 			}
 
 			uid, err := uuid.Parse(userID)
 			if err != nil {
-				http.Error(w, `{"success":false,"error":{"code":"UNAUTHORIZED","message":"invalid user ID"}}`, http.StatusUnauthorized)
+				utils.RespondUnauthorized(w, "invalid user ID")
 				return
 			}
 
 			allowed, err := authorizer.Enforce(uid, resource, action)
 			if err != nil {
-				http.Error(w, `{"success":false,"error":{"code":"INTERNAL_ERROR","message":"authorization check failed"}}`, http.StatusInternalServerError)
+				utils.RespondInternalError(w, "authorization check failed")
 				return
 			}
 
 			if !allowed {
-				http.Error(w, `{"success":false,"error":{"code":"FORBIDDEN","message":"insufficient permissions"}}`, http.StatusForbidden)
+				utils.RespondForbidden(w, "FORBIDDEN", "insufficient permissions")
 				return
 			}
 
