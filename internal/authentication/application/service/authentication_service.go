@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/entity"
+	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/event"
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/repository"
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/events"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -34,7 +36,7 @@ type AuthenticationService struct {
 	userRepo         repository.UserRepository
 	refreshRepo      repository.RefreshTokenRepository
 	tokenService     domain.TokenService
-	mailer           domain.Emailer
+	bus              events.EventBus
 	denylist         func(ctx context.Context, jti string, ttl time.Duration) error
 	accessTokenTTL   time.Duration
 	refreshTokenTTL  time.Duration
@@ -46,13 +48,13 @@ func NewAuthenticationService(
 	userRepo repository.UserRepository,
 	refreshRepo repository.RefreshTokenRepository,
 	tokenService domain.TokenService,
-	mailer domain.Emailer,
+	bus events.EventBus,
 ) *AuthenticationService {
 	return &AuthenticationService{
 		userRepo:         userRepo,
 		refreshRepo:      refreshRepo,
 		tokenService:     tokenService,
-		mailer:           mailer,
+		bus:              bus,
 		accessTokenTTL:   15 * time.Minute,
 		refreshTokenTTL:  7 * 24 * time.Hour,
 		maxLoginAttempts: 5,
@@ -97,7 +99,14 @@ func (s *AuthenticationService) Register(ctx context.Context, email, password, n
 		return nil, err
 	}
 
-	_ = s.mailer.SendVerification(user.Email, user.Name, token)
+	_ = s.bus.Publish(ctx, events.Event{
+		Type: event.UserRegisteredEvent,
+		Payload: event.UserRegistered{
+			Email:             user.Email,
+			Name:              user.Name,
+			VerificationToken: token,
+		},
+	})
 
 	return user, nil
 }
@@ -215,7 +224,14 @@ func (s *AuthenticationService) VerifyEmail(ctx context.Context, token string) e
 		return err
 	}
 
-	_ = s.mailer.SendWelcome(user.Email, user.Name)
+	_ = s.bus.Publish(ctx, events.Event{
+		Type: event.EmailVerifiedEvent,
+		Payload: event.EmailVerified{
+			UserID: user.ID.String(),
+			Email:  user.Email,
+			Name:   user.Name,
+		},
+	})
 	return nil
 }
 
@@ -237,7 +253,14 @@ func (s *AuthenticationService) ForgotPassword(ctx context.Context, email string
 		return err
 	}
 
-	_ = s.mailer.SendPasswordReset(user.Email, user.Name, token)
+	_ = s.bus.Publish(ctx, events.Event{
+		Type: event.PasswordResetRequestedEvent,
+		Payload: event.PasswordResetRequested{
+			Email:      user.Email,
+			Name:       user.Name,
+			ResetToken: token,
+		},
+	})
 	return nil
 }
 
@@ -283,7 +306,14 @@ func (s *AuthenticationService) ResendVerification(ctx context.Context, email st
 		return err
 	}
 
-	return s.mailer.SendVerification(user.Email, user.Name, token)
+	return s.bus.Publish(ctx, events.Event{
+		Type: event.UserRegisteredEvent,
+		Payload: event.UserRegistered{
+			Email:             user.Email,
+			Name:              user.Name,
+			VerificationToken: token,
+		},
+	})
 }
 
 type TokenPair struct {

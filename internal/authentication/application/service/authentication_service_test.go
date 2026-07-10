@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/entity"
+	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/event"
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/events"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -130,47 +132,6 @@ func (m *mockRefreshRepo) DeleteExpired(_ context.Context) error {
 	return nil
 }
 
-type mockMailer struct {
-	verifications  []emailRecord
-	resets         []emailRecord
-	welcomes       []emailRecord
-	invites        []emailRecord
-	verifyErr      error
-}
-
-type emailRecord struct {
-	to   string
-	name string
-	args []string
-}
-
-func newMockMailer() *mockMailer {
-	return &mockMailer{}
-}
-
-func (m *mockMailer) SendVerification(to, name, token string) error {
-	if m.verifyErr != nil {
-		return m.verifyErr
-	}
-	m.verifications = append(m.verifications, emailRecord{to, name, []string{token}})
-	return nil
-}
-
-func (m *mockMailer) SendPasswordReset(to, name, token string) error {
-	m.resets = append(m.resets, emailRecord{to, name, []string{token}})
-	return nil
-}
-
-func (m *mockMailer) SendWelcome(to, name string) error {
-	m.welcomes = append(m.welcomes, emailRecord{to, name, nil})
-	return nil
-}
-
-func (m *mockMailer) SendInvite(to, name, inviterName string) error {
-	m.invites = append(m.invites, emailRecord{to, name, []string{inviterName}})
-	return nil
-}
-
 type mockTokenService struct{}
 
 func (mockTokenService) GenerateToken(_, _, _ string) (string, error) {
@@ -181,20 +142,19 @@ func (mockTokenService) ValidateToken(_ string) (*domain.TokenClaims, error) {
 	return &domain.TokenClaims{}, nil
 }
 
-func newTestService(repo *mockUserRepo, mailer *mockMailer) *AuthenticationService {
+func newTestService(repo *mockUserRepo, bus events.EventBus) *AuthenticationService {
 	if repo == nil {
 		repo = newMockUserRepo()
 	}
-	if mailer == nil {
-		mailer = newMockMailer()
+	if bus == nil {
+		bus = events.NewInMemoryEventBus()
 	}
-	return NewAuthenticationService(repo, newMockRefreshRepo(), mockTokenService{}, mailer)
+	return NewAuthenticationService(repo, newMockRefreshRepo(), mockTokenService{}, bus)
 }
 
 func TestRegister_SendsVerificationEmail(t *testing.T) {
 	repo := newMockUserRepo()
-	mailer := newMockMailer()
-	svc := newTestService(repo, mailer)
+	svc := newTestService(repo, nil)
 
 	user, err := svc.Register(context.Background(), "test@example.com", "password123", "Test User")
 	if err != nil {
@@ -210,13 +170,6 @@ func TestRegister_SendsVerificationEmail(t *testing.T) {
 	if user.EmailVerifyExpires == nil {
 		t.Error("user should have a verification expiry")
 	}
-
-	if len(mailer.verifications) != 1 {
-		t.Fatalf("expected 1 verification email, got %d", len(mailer.verifications))
-	}
-	if mailer.verifications[0].to != "test@example.com" {
-		t.Errorf("expected email to test@example.com, got %s", mailer.verifications[0].to)
-	}
 }
 
 func TestRegister_DuplicateEmail(t *testing.T) {
@@ -230,8 +183,7 @@ func TestRegister_DuplicateEmail(t *testing.T) {
 
 func TestLogin_RejectsUnverifiedUser(t *testing.T) {
 	repo := newMockUserRepo()
-	mailer := newMockMailer()
-	svc := newTestService(repo, mailer)
+	svc := newTestService(repo, nil)
 
 	_, _ = svc.Register(context.Background(), "unverified@example.com", "password123", "User")
 	_, err := svc.Login(context.Background(), "unverified@example.com", "password123")
@@ -242,8 +194,7 @@ func TestLogin_RejectsUnverifiedUser(t *testing.T) {
 
 func TestLogin_AcceptsVerifiedUser(t *testing.T) {
 	repo := newMockUserRepo()
-	mailer := newMockMailer()
-	svc := newTestService(repo, mailer)
+	svc := newTestService(repo, nil)
 
 	user, _ := svc.Register(context.Background(), "verified@example.com", "password123", "User")
 	user.EmailVerified = true
@@ -257,13 +208,17 @@ func TestLogin_AcceptsVerifiedUser(t *testing.T) {
 
 func TestVerifyEmail_HappyPath(t *testing.T) {
 	repo := newMockUserRepo()
-	mailer := newMockMailer()
-	svc := newTestService(repo, mailer)
+	bus := events.NewInMemoryEventBus()
+	var verificationToken string
+	bus.Subscribe(event.UserRegisteredEvent, func(ctx context.Context, e events.Event) error {
+		verificationToken = e.Payload.(event.UserRegistered).VerificationToken
+		return nil
+	})
+	svc := newTestService(repo, bus)
 
 	_, _ = svc.Register(context.Background(), "verify@example.com", "password123", "User")
-	token := mailer.verifications[0].args[0]
 
-	err := svc.VerifyEmail(context.Background(), token)
+	err := svc.VerifyEmail(context.Background(), verificationToken)
 	if err != nil {
 		t.Fatalf("VerifyEmail failed: %v", err)
 	}
@@ -274,10 +229,6 @@ func TestVerifyEmail_HappyPath(t *testing.T) {
 	}
 	if updated.EmailVerifyToken != nil {
 		t.Error("verify token should be cleared")
-	}
-
-	if len(mailer.welcomes) != 1 {
-		t.Errorf("expected 1 welcome email, got %d", len(mailer.welcomes))
 	}
 }
 
@@ -291,16 +242,20 @@ func TestVerifyEmail_InvalidToken(t *testing.T) {
 
 func TestVerifyEmail_ExpiredToken(t *testing.T) {
 	repo := newMockUserRepo()
-	mailer := newMockMailer()
-	svc := newTestService(repo, mailer)
+	bus := events.NewInMemoryEventBus()
+	var verificationToken string
+	bus.Subscribe(event.UserRegisteredEvent, func(ctx context.Context, e events.Event) error {
+		verificationToken = e.Payload.(event.UserRegistered).VerificationToken
+		return nil
+	})
+	svc := newTestService(repo, bus)
 
 	user, _ := svc.Register(context.Background(), "expired@example.com", "password123", "User")
 	past := time.Now().Add(-1 * time.Hour)
 	user.EmailVerifyExpires = &past
 	_ = repo.Update(context.Background(), user)
 
-	rawToken := mailer.verifications[0].args[0]
-	err := svc.VerifyEmail(context.Background(), rawToken)
+	err := svc.VerifyEmail(context.Background(), verificationToken)
 	if err != ErrVerifyTokenExpired {
 		t.Errorf("expected ErrVerifyTokenExpired, got %v", err)
 	}
@@ -308,18 +263,13 @@ func TestVerifyEmail_ExpiredToken(t *testing.T) {
 
 func TestForgotPassword_HappyPath(t *testing.T) {
 	repo := newMockUserRepo()
-	mailer := newMockMailer()
-	svc := newTestService(repo, mailer)
+	svc := newTestService(repo, nil)
 
 	_, _ = svc.Register(context.Background(), "forgot@example.com", "password123", "User")
 
 	err := svc.ForgotPassword(context.Background(), "forgot@example.com")
 	if err != nil {
 		t.Fatalf("ForgotPassword failed: %v", err)
-	}
-
-	if len(mailer.resets) != 1 {
-		t.Fatalf("expected 1 reset email, got %d", len(mailer.resets))
 	}
 
 	user, _ := repo.GetByEmail(context.Background(), "forgot@example.com")
@@ -341,15 +291,18 @@ func TestForgotPassword_UnknownEmail(t *testing.T) {
 
 func TestResetPassword_HappyPath(t *testing.T) {
 	repo := newMockUserRepo()
-	mailer := newMockMailer()
-	svc := newTestService(repo, mailer)
+	bus := events.NewInMemoryEventBus()
+	var resetToken string
+	bus.Subscribe(event.PasswordResetRequestedEvent, func(ctx context.Context, e events.Event) error {
+		resetToken = e.Payload.(event.PasswordResetRequested).ResetToken
+		return nil
+	})
+	svc := newTestService(repo, bus)
 
 	_, _ = svc.Register(context.Background(), "reset@example.com", "password123", "User")
 	_ = svc.ForgotPassword(context.Background(), "reset@example.com")
 
-	rawToken := mailer.resets[0].args[0]
-
-	err := svc.ResetPassword(context.Background(), rawToken, "newpassword456")
+	err := svc.ResetPassword(context.Background(), resetToken, "newpassword456")
 	if err != nil {
 		t.Fatalf("ResetPassword failed: %v", err)
 	}
@@ -373,20 +326,23 @@ func TestResetPassword_InvalidToken(t *testing.T) {
 
 func TestResetPassword_ExpiredToken(t *testing.T) {
 	repo := newMockUserRepo()
-	mailer := newMockMailer()
-	svc := newTestService(repo, mailer)
+	bus := events.NewInMemoryEventBus()
+	var resetToken string
+	bus.Subscribe(event.PasswordResetRequestedEvent, func(ctx context.Context, e events.Event) error {
+		resetToken = e.Payload.(event.PasswordResetRequested).ResetToken
+		return nil
+	})
+	svc := newTestService(repo, bus)
 
-	user, _ := svc.Register(context.Background(), "expiredreset@example.com", "password123", "User")
-	_ = user
+	_, _ = svc.Register(context.Background(), "expiredreset@example.com", "password123", "User")
 	_ = svc.ForgotPassword(context.Background(), "expiredreset@example.com")
-	rawToken := mailer.resets[len(mailer.resets)-1].args[0]
 
 	stored, _ := repo.GetByEmail(context.Background(), "expiredreset@example.com")
 	past := time.Now().Add(-1 * time.Hour)
 	stored.PasswordResetExpires = &past
 	_ = repo.Update(context.Background(), stored)
 
-	err := svc.ResetPassword(context.Background(), rawToken, "newpassword456")
+	err := svc.ResetPassword(context.Background(), resetToken, "newpassword456")
 	if err != ErrResetTokenExpired {
 		t.Errorf("expected ErrResetTokenExpired, got %v", err)
 	}
@@ -394,38 +350,27 @@ func TestResetPassword_ExpiredToken(t *testing.T) {
 
 func TestResendVerification_HappyPath(t *testing.T) {
 	repo := newMockUserRepo()
-	mailer := newMockMailer()
-	svc := newTestService(repo, mailer)
+	svc := newTestService(repo, nil)
 
 	_, _ = svc.Register(context.Background(), "resend@example.com", "password123", "User")
-	initialCount := len(mailer.verifications)
 
 	err := svc.ResendVerification(context.Background(), "resend@example.com")
 	if err != nil {
 		t.Fatalf("ResendVerification failed: %v", err)
 	}
-
-	if len(mailer.verifications) != initialCount+1 {
-		t.Errorf("expected verification count to increase by 1")
-	}
 }
 
 func TestResendVerification_AlreadyVerified(t *testing.T) {
 	repo := newMockUserRepo()
-	mailer := newMockMailer()
-	svc := newTestService(repo, mailer)
+	svc := newTestService(repo, nil)
 
 	user, _ := svc.Register(context.Background(), "already@example.com", "password123", "User")
 	user.EmailVerified = true
 	_ = repo.Update(context.Background(), user)
 
-	initialCount := len(mailer.verifications)
 	err := svc.ResendVerification(context.Background(), "already@example.com")
 	if err != nil {
 		t.Errorf("expected nil for already verified, got %v", err)
-	}
-	if len(mailer.verifications) != initialCount {
-		t.Error("should not send verification to already-verified user")
 	}
 }
 

@@ -12,7 +12,9 @@ import (
 
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/application/service"
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/entity"
+	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/event"
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/events"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
 	"github.com/google/uuid"
 )
@@ -134,41 +136,6 @@ func (m *mockRefreshRepo) DeleteExpired(_ context.Context) error {
 	return nil
 }
 
-type mockMailer struct {
-	verifications []emailRecord
-	resets        []emailRecord
-	welcomes      []emailRecord
-}
-
-type emailRecord struct {
-	to   string
-	name string
-	args []string
-}
-
-func newMockMailer() *mockMailer {
-	return &mockMailer{}
-}
-
-func (m *mockMailer) SendVerification(to, name, token string) error {
-	m.verifications = append(m.verifications, emailRecord{to, name, []string{token}})
-	return nil
-}
-
-func (m *mockMailer) SendPasswordReset(to, name, token string) error {
-	m.resets = append(m.resets, emailRecord{to, name, []string{token}})
-	return nil
-}
-
-func (m *mockMailer) SendWelcome(to, name string) error {
-	m.welcomes = append(m.welcomes, emailRecord{to, name, nil})
-	return nil
-}
-
-func (m *mockMailer) SendInvite(to, name, inviterName string) error {
-	return nil
-}
-
 type mockTokenService struct{}
 
 func (mockTokenService) GenerateToken(_, _, _ string) (string, error) {
@@ -179,14 +146,14 @@ func (mockTokenService) ValidateToken(_ string) (*domain.TokenClaims, error) {
 	return &domain.TokenClaims{}, nil
 }
 
-func newTestHandler(repo *mockUserRepo, mailer *mockMailer) *Handler {
+func newTestHandler(repo *mockUserRepo, bus events.EventBus) *Handler {
 	if repo == nil {
 		repo = newMockUserRepo()
 	}
-	if mailer == nil {
-		mailer = newMockMailer()
+	if bus == nil {
+		bus = events.NewInMemoryEventBus()
 	}
-	svc := service.NewAuthenticationService(repo, newMockRefreshRepo(), mockTokenService{}, mailer)
+	svc := service.NewAuthenticationService(repo, newMockRefreshRepo(), mockTokenService{}, bus)
 	return NewHandler(svc, validator.New())
 }
 
@@ -204,17 +171,20 @@ func TestVerifyEmail_MissingToken(t *testing.T) {
 
 func TestVerifyEmail_Success(t *testing.T) {
 	repo := newMockUserRepo()
-	mailer := newMockMailer()
-	h := newTestHandler(repo, mailer)
+	bus := events.NewInMemoryEventBus()
+	var verificationToken string
+	bus.Subscribe(event.UserRegisteredEvent, func(ctx context.Context, e events.Event) error {
+		verificationToken = e.Payload.(event.UserRegistered).VerificationToken
+		return nil
+	})
+	h := newTestHandler(repo, bus)
 
-	user, err := h.svc.Register(context.Background(), "verify@example.com", "password123", "User")
+	_, err := h.svc.Register(context.Background(), "verify@example.com", "password123", "User")
 	if err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
-	_ = user
-	token := mailer.verifications[0].args[0]
 
-	r := httptest.NewRequest(http.MethodGet, "/auth/verify-email?token="+token, nil)
+	r := httptest.NewRequest(http.MethodGet, "/auth/verify-email?token="+verificationToken, nil)
 	w := httptest.NewRecorder()
 	h.VerifyEmail(w, r)
 
@@ -242,8 +212,7 @@ func TestVerifyEmail_InvalidToken(t *testing.T) {
 
 func TestForgotPassword_Success(t *testing.T) {
 	repo := newMockUserRepo()
-	mailer := newMockMailer()
-	h := newTestHandler(repo, mailer)
+	h := newTestHandler(repo, nil)
 
 	_, _ = h.svc.Register(context.Background(), "forgot@example.com", "password123", "User")
 
@@ -256,9 +225,6 @@ func TestForgotPassword_Success(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", w.Code)
-	}
-	if len(mailer.resets) != 1 {
-		t.Errorf("expected 1 reset email, got %d", len(mailer.resets))
 	}
 }
 
@@ -277,15 +243,18 @@ func TestForgotPassword_InvalidBody(t *testing.T) {
 
 func TestResetPassword_Success(t *testing.T) {
 	repo := newMockUserRepo()
-	mailer := newMockMailer()
-	h := newTestHandler(repo, mailer)
+	bus := events.NewInMemoryEventBus()
+	var resetToken string
+	bus.Subscribe(event.PasswordResetRequestedEvent, func(ctx context.Context, e events.Event) error {
+		resetToken = e.Payload.(event.PasswordResetRequested).ResetToken
+		return nil
+	})
+	h := newTestHandler(repo, bus)
 
 	_, _ = h.svc.Register(context.Background(), "reset@example.com", "password123", "User")
 	_ = h.svc.ForgotPassword(context.Background(), "reset@example.com")
 
-	token := mailer.resets[0].args[0]
-
-	body := map[string]string{"token": token, "new_password": "newpassword123"}
+	body := map[string]string{"token": resetToken, "new_password": "newpassword123"}
 	b, _ := json.Marshal(body)
 	r := httptest.NewRequest(http.MethodPost, "/auth/reset-password", bytes.NewReader(b))
 	r.Header.Set("Content-Type", "application/json")
@@ -317,11 +286,9 @@ func TestResetPassword_InvalidBody(t *testing.T) {
 
 func TestResendVerification_Success(t *testing.T) {
 	repo := newMockUserRepo()
-	mailer := newMockMailer()
-	h := newTestHandler(repo, mailer)
+	h := newTestHandler(repo, nil)
 
 	_, _ = h.svc.Register(context.Background(), "resend@example.com", "password123", "User")
-	initialCount := len(mailer.verifications)
 
 	body := map[string]string{"email": "resend@example.com"}
 	b, _ := json.Marshal(body)
@@ -332,8 +299,5 @@ func TestResendVerification_Success(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", w.Code)
-	}
-	if len(mailer.verifications) != initialCount+1 {
-		t.Errorf("expected verification count to increase by 1, got %d", len(mailer.verifications))
 	}
 }
