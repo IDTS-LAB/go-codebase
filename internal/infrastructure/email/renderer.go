@@ -9,6 +9,8 @@ import (
 //go:embed templates/*.html
 var templateFS embed.FS
 
+var templates = template.Must(template.ParseFS(templateFS, "templates/*.html"))
+
 type TemplateData struct {
 	Name        string
 	VerifyURL   string
@@ -18,13 +20,8 @@ type TemplateData struct {
 }
 
 func renderTemplate(name string, data TemplateData) (string, error) {
-	tmplPath := "templates/" + name + ".html"
-	t, err := template.ParseFS(templateFS, tmplPath)
-	if err != nil {
-		return "", err
-	}
 	var buf bytes.Buffer
-	if err := t.Execute(&buf, data); err != nil {
+	if err := templates.ExecuteTemplate(&buf, name+".html", data); err != nil {
 		return "", err
 	}
 	return buf.String(), nil

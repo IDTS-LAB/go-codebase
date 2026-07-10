@@ -8,7 +8,7 @@ import (
 
 var Module = fx.Module("email", fx.Provide(NewEmailer))
 
-func NewEmailer(cfg *config.Config) domain.Emailer {
+func NewEmailer(cfg *config.Config, log domain.Logger) domain.Emailer {
 	switch cfg.Email.Provider {
 	case "smtp":
 		return NewSMTPMailer(
@@ -29,6 +29,6 @@ func NewEmailer(cfg *config.Config) domain.Emailer {
 			cfg.Email.FrontendURL,
 		)
 	default:
-		return NewConsoleMailer(cfg.Email.From, cfg.Email.FromName, cfg.Email.FrontendURL)
+		return NewConsoleMailer(cfg.Email.From, cfg.Email.FromName, cfg.Email.FrontendURL, log)
 	}
 }

@@ -211,7 +211,8 @@ func TestVerifyEmail_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
-	token := *user.EmailVerifyToken
+	_ = user
+	token := mailer.verifications[0].args[0]
 
 	r := httptest.NewRequest(http.MethodGet, "/auth/verify-email?token="+token, nil)
 	w := httptest.NewRecorder()
@@ -282,8 +283,7 @@ func TestResetPassword_Success(t *testing.T) {
 	_, _ = h.svc.Register(context.Background(), "reset@example.com", "password123", "User")
 	_ = h.svc.ForgotPassword(context.Background(), "reset@example.com")
 
-	user, _ := repo.GetByEmail(context.Background(), "reset@example.com")
-	token := *user.PasswordResetToken
+	token := mailer.resets[0].args[0]
 
 	body := map[string]string{"token": token, "new_password": "newpassword123"}
 	b, _ := json.Marshal(body)
