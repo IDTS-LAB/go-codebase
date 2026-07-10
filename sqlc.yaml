@@ -11,6 +11,11 @@ sql:
         emit_json_tags: true
         emit_empty_slices: true
         emit_pointers_for_null_types: true
+        overrides:
+          - db_type: "jsonb"
+            go_type:
+              type: "[]byte"
+            nullable: true
 
   - engine: "postgresql"
     queries: "internal/authentication/infrastructure/persistence/queries/queries.sql"
@@ -23,6 +28,11 @@ sql:
         emit_json_tags: true
         emit_empty_slices: true
         emit_pointers_for_null_types: true
+        overrides:
+          - db_type: "jsonb"
+            go_type:
+              type: "[]byte"
+            nullable: true
 
   - engine: "postgresql"
     queries: "internal/authorization/infrastructure/persistence/queries/queries.sql"
@@ -35,6 +45,11 @@ sql:
         emit_json_tags: true
         emit_empty_slices: true
         emit_pointers_for_null_types: true
+        overrides:
+          - db_type: "jsonb"
+            go_type:
+              type: "[]byte"
+            nullable: true
 
   - engine: "postgresql"
     queries: "internal/user/infrastructure/persistence/queries/queries.sql"
@@ -47,6 +62,11 @@ sql:
         emit_json_tags: true
         emit_empty_slices: true
         emit_pointers_for_null_types: true
+        overrides:
+          - db_type: "jsonb"
+            go_type:
+              type: "[]byte"
+            nullable: true
 
   - engine: "postgresql"
     queries: "internal/shared/auditlog/queries/queries.sql"
@@ -59,3 +79,8 @@ sql:
         emit_json_tags: true
         emit_empty_slices: true
         emit_pointers_for_null_types: true
+        overrides:
+          - db_type: "jsonb"
+            go_type:
+              type: "[]byte"
+            nullable: true
