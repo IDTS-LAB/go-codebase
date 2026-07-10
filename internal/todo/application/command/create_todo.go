@@ -3,8 +3,10 @@ package command
 import (
 	"context"
 
+	"github.com/IDTS-LAB/go-codebase/internal/shared/events"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/application/dto"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/application/mapper"
+	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/event"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/service"
 )
 
@@ -15,10 +17,11 @@ type CreateTodoCommand struct {
 
 type CreateTodoHandler struct {
 	domainSvc *service.TodoDomainService
+	eventBus  events.EventBus
 }
 
-func NewCreateTodoHandler(domainSvc *service.TodoDomainService) *CreateTodoHandler {
-	return &CreateTodoHandler{domainSvc: domainSvc}
+func NewCreateTodoHandler(domainSvc *service.TodoDomainService, eventBus events.EventBus) *CreateTodoHandler {
+	return &CreateTodoHandler{domainSvc: domainSvc, eventBus: eventBus}
 }
 
 func (h *CreateTodoHandler) Handle(ctx context.Context, cmd CreateTodoCommand) (dto.TodoResponse, error) {
@@ -26,5 +29,15 @@ func (h *CreateTodoHandler) Handle(ctx context.Context, cmd CreateTodoCommand) (
 	if err != nil {
 		return dto.TodoResponse{}, err
 	}
+
+	_ = h.eventBus.Publish(ctx, events.Event{
+		Type: event.TodoCreatedEvent,
+		Payload: event.TodoCreated{
+			ID:        todo.ID,
+			Title:     todo.Title,
+			CreatedAt: todo.CreatedAt,
+		},
+	})
+
 	return mapper.ToTodoResponse(todo), nil
 }

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/IDTS-LAB/go-codebase/internal/shared/events"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/application/dto"
@@ -63,11 +64,12 @@ func setupHandler(t *testing.T) (*httpHandler.Handler, *MockTodoRepo) {
 	t.Helper()
 	repo := new(MockTodoRepo)
 	domainSvc := service.NewTodoDomainService(repo)
+	eventBus := events.NewInMemoryEventBus()
 
-	createH := command.NewCreateTodoHandler(domainSvc)
-	updateH := command.NewUpdateTodoHandler(domainSvc)
-	deleteH := command.NewDeleteTodoHandler(domainSvc)
-	completeH := command.NewCompleteTodoHandler(domainSvc)
+	createH := command.NewCreateTodoHandler(domainSvc, eventBus)
+	updateH := command.NewUpdateTodoHandler(domainSvc, eventBus)
+	deleteH := command.NewDeleteTodoHandler(domainSvc, eventBus)
+	completeH := command.NewCompleteTodoHandler(domainSvc, eventBus)
 	getH := query.NewGetTodoHandler(domainSvc)
 	listH := query.NewListTodosHandler(domainSvc)
 	searchH := query.NewSearchTodosHandler(domainSvc)
