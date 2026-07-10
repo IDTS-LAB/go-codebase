@@ -19,6 +19,7 @@ type Handlers struct {
 func NewRouter(h Handlers, mw middleware.Registry, log domain.Logger, cfg *config.Config) *chi.Mux {
 	r := chi.NewRouter()
 
+	r.Use(mw.Tracing)
 	r.Use(middleware.RequestID)
 	r.Use(mw.ErrorHandler)
 	r.Use(middleware.SecurityHeaders)

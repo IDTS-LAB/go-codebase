@@ -16,6 +16,8 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/google/uuid"
 	"github.com/rs/cors"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type contextKey string
@@ -33,7 +35,14 @@ func ErrorHandler(log domain.Logger, errorRepo *auditlog.Repository) func(http.H
 			defer func() {
 				if err := recover(); err != nil {
 					stack := string(debug.Stack())
-					log.Error(r.Context(), "panic recovered",
+					ctx := r.Context()
+
+					if span := trace.SpanFromContext(ctx); span.IsRecording() {
+						span.SetStatus(codes.Error, "panic recovered")
+						span.RecordError(fmt.Errorf("%v", err))
+					}
+
+					log.Error(ctx, "panic recovered",
 						domain.String("error", fmt.Sprintf("%v", err)),
 						domain.String("stack", stack),
 					)
@@ -56,6 +65,13 @@ func ErrorRecorder(log domain.Logger, errorRepo *auditlog.Repository) func(http.
 			next.ServeHTTP(wrapped, r)
 
 			if wrapped.statusCode >= 500 {
+				ctx := r.Context()
+				if span := trace.SpanFromContext(ctx); span.IsRecording() {
+					span.SetStatus(codes.Error, http.StatusText(wrapped.statusCode))
+					if wrapped.errMsg != "" {
+						span.RecordError(fmt.Errorf("%s", wrapped.errMsg))
+					}
+				}
 				persistError(r, errorRepo, log, wrapped.statusCode,
 					http.StatusText(wrapped.statusCode), wrapped.errMsg, wrapped.stack)
 			}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/config"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -61,27 +62,42 @@ func NewZapLogger(cfg *config.Config) (domain.Logger, error) {
 }
 
 func (l *ZapLogger) Debug(ctx context.Context, msg string, fields ...domain.Field) {
-	l.logger.Debug(msg, toZapFields(fields)...)
+	l.logger.Debug(msg, appendTraceFields(ctx, toZapFields(fields))...)
 }
 
 func (l *ZapLogger) Info(ctx context.Context, msg string, fields ...domain.Field) {
-	l.logger.Info(msg, toZapFields(fields)...)
+	l.logger.Info(msg, appendTraceFields(ctx, toZapFields(fields))...)
 }
 
 func (l *ZapLogger) Warn(ctx context.Context, msg string, fields ...domain.Field) {
-	l.logger.Warn(msg, toZapFields(fields)...)
+	l.logger.Warn(msg, appendTraceFields(ctx, toZapFields(fields))...)
 }
 
 func (l *ZapLogger) Error(ctx context.Context, msg string, fields ...domain.Field) {
-	l.logger.Error(msg, toZapFields(fields)...)
+	l.logger.Error(msg, appendTraceFields(ctx, toZapFields(fields))...)
 }
 
 func (l *ZapLogger) Fatal(ctx context.Context, msg string, fields ...domain.Field) {
-	l.logger.Fatal(msg, toZapFields(fields)...)
+	l.logger.Fatal(msg, appendTraceFields(ctx, toZapFields(fields))...)
 }
 
 func (l *ZapLogger) With(fields ...domain.Field) domain.Logger {
 	return &ZapLogger{logger: l.logger.With(toZapFields(fields)...)}
+}
+
+func appendTraceFields(ctx context.Context, fields []zap.Field) []zap.Field {
+	span := trace.SpanFromContext(ctx)
+	if !span.IsRecording() {
+		return fields
+	}
+	spanContext := span.SpanContext()
+	if spanContext.HasTraceID() {
+		fields = append(fields, zap.String("trace_id", spanContext.TraceID().String()))
+	}
+	if spanContext.HasSpanID() {
+		fields = append(fields, zap.String("span_id", spanContext.SpanID().String()))
+	}
+	return fields
 }
 
 func toZapFields(fields []domain.Field) []zap.Field {

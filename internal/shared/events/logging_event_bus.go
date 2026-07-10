@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // LoggingEventBus wraps an EventBus and logs any errors returned by Publish.
@@ -22,6 +24,10 @@ func NewLoggingEventBus(inner *InMemoryEventBus, log domain.Logger) EventBus {
 func (b *LoggingEventBus) Publish(ctx context.Context, event Event) error {
 	err := b.inner.Publish(ctx, event)
 	if err != nil {
+		if span := trace.SpanFromContext(ctx); span.IsRecording() {
+			span.SetStatus(codes.Error, "event publish failed")
+			span.RecordError(err)
+		}
 		b.log.Error(ctx, "event publish failed",
 			domain.String("event_type", event.Type),
 			domain.Error(err),

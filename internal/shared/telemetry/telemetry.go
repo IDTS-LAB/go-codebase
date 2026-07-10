@@ -7,6 +7,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
@@ -14,9 +15,12 @@ import (
 	"go.uber.org/zap"
 )
 
-var Module = fx.Module("telemetry", fx.Provide(NewTracerProvider))
+var Module = fx.Module("telemetry",
+	fx.Provide(NewTracerProvider),
+	fx.Invoke(func(*sdktrace.TracerProvider) {}),
+)
 
-func NewTracerProvider(cfg *config.Config, log *zap.Logger) (*sdktrace.TracerProvider, error) {
+func NewTracerProvider(cfg *config.Config, log *zap.Logger, lc fx.Lifecycle) (*sdktrace.TracerProvider, error) {
 	if cfg.Telemetry.ExporterEndpoint == "" {
 		log.Warn("telemetry exporter endpoint not configured, tracing disabled")
 		tp := sdktrace.NewTracerProvider()
@@ -54,10 +58,25 @@ func NewTracerProvider(cfg *config.Config, log *zap.Logger) (*sdktrace.TracerPro
 	)
 
 	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
 	log.Info("telemetry initialized",
 		zap.String("service", cfg.Telemetry.ServiceName),
 		zap.String("endpoint", cfg.Telemetry.ExporterEndpoint),
 	)
+
+	lc.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			if err := tp.Shutdown(ctx); err != nil {
+				log.Warn("failed to shutdown tracer provider", zap.Error(err))
+				return err
+			}
+			log.Info("tracer provider shutdown complete")
+			return nil
+		},
+	})
 
 	return tp, nil
 }
