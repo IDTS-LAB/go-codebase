@@ -55,8 +55,12 @@ func NewRepository(db *sql.DB) *Repository {
 
 func (r *Repository) InsertAuditLog(ctx context.Context, log *AuditLog) error {
 	q := sqlc.New(r.db)
+	id, err := uuid.Parse(log.ID)
+	if err != nil {
+		return err
+	}
 	return q.InsertAuditLog(ctx, sqlc.InsertAuditLogParams{
-		ID:           uuid.MustParse(log.ID),
+		ID:           id,
 		RequestID:    log.RequestID,
 		UserID:       ptrStringToNullUUID(log.UserID),
 		UserEmail:    ptrStringToNullString(log.UserEmail),
@@ -74,8 +78,12 @@ func (r *Repository) InsertAuditLog(ctx context.Context, log *AuditLog) error {
 
 func (r *Repository) InsertErrorLog(ctx context.Context, log *ErrorLog) error {
 	q := sqlc.New(r.db)
+	id, err := uuid.Parse(log.ID)
+	if err != nil {
+		return err
+	}
 	return q.InsertErrorLog(ctx, sqlc.InsertErrorLogParams{
-		ID:          uuid.MustParse(log.ID),
+		ID:          id,
 		RequestID:   log.RequestID,
 		UserID:      ptrStringToNullUUID(log.UserID),
 		UserEmail:   ptrStringToNullString(log.UserEmail),
@@ -89,7 +97,7 @@ func (r *Repository) InsertErrorLog(ctx context.Context, log *ErrorLog) error {
 		Ip:          log.IP,
 		UserAgent:   log.UserAgent,
 		RequestBody: ptrStringToNullString(log.RequestBody),
-		Column15: log.Metadata,
+		Column15:    log.Metadata,
 		CreatedAt:   log.CreatedAt,
 	})
 }
@@ -105,5 +113,9 @@ func ptrStringToNullUUID(s *string) uuid.NullUUID {
 	if s == nil {
 		return uuid.NullUUID{Valid: false}
 	}
-	return uuid.NullUUID{UUID: uuid.MustParse(*s), Valid: true}
+	uid, err := uuid.Parse(*s)
+	if err != nil {
+		return uuid.NullUUID{Valid: false}
+	}
+	return uuid.NullUUID{UUID: uid, Valid: true}
 }
