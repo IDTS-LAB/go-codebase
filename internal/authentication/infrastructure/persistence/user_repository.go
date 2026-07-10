@@ -4,25 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/entity"
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/repository"
+	"github.com/IDTS-LAB/go-codebase/internal/authentication/infrastructure/persistence/sqlc"
+	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/google/uuid"
 )
-
-const userSelectColumns = "id, email, password, name, is_active, failed_login_attempts, locked_until, email_verified, email_verify_token, email_verify_expires, password_reset_token, password_reset_expires, created_at, updated_at, deleted_at"
-
-func scanUser(row interface{ Scan(...interface{}) error }) (*entity.User, error) {
-	user := &entity.User{}
-	err := row.Scan(
-		&user.ID, &user.Email, &user.Password, &user.Name, &user.IsActive,
-		&user.FailedLoginAttempts, &user.LockedUntil,
-		&user.EmailVerified, &user.EmailVerifyToken, &user.EmailVerifyExpires,
-		&user.PasswordResetToken, &user.PasswordResetExpires,
-		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
-	)
-	return user, err
-}
 
 type userRepository struct {
 	db *sql.DB
@@ -33,14 +22,23 @@ func NewUserRepository(db *sql.DB) repository.UserRepository {
 }
 
 func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
-	query := `INSERT INTO users (id, email, password, name, is_active, failed_login_attempts, locked_until, email_verified, email_verify_token, email_verify_expires, password_reset_token, password_reset_expires, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
-	_, err := r.db.ExecContext(ctx, query,
-		user.ID, user.Email, user.Password, user.Name, user.IsActive,
-		user.FailedLoginAttempts, user.LockedUntil,
-		user.EmailVerified, user.EmailVerifyToken, user.EmailVerifyExpires,
-		user.PasswordResetToken, user.PasswordResetExpires,
-		user.CreatedAt, user.UpdatedAt,
-	)
+	q := sqlc.New(r.db)
+	err := q.CreateUser(ctx, sqlc.CreateUserParams{
+		ID:                  user.ID,
+		Email:               user.Email,
+		Password:            user.Password,
+		Name:                user.Name,
+		IsActive:            user.IsActive,
+		FailedLoginAttempts: int32(user.FailedLoginAttempts),
+		LockedUntil:         ptrToNullTime(user.LockedUntil),
+		EmailVerified:       sql.NullBool{Bool: user.EmailVerified, Valid: true},
+		EmailVerifyToken:    ptrToNullString(user.EmailVerifyToken),
+		EmailVerifyExpires:  ptrToNullTime(user.EmailVerifyExpires),
+		PasswordResetToken:  ptrToNullString(user.PasswordResetToken),
+		PasswordResetExpires: ptrToNullTime(user.PasswordResetExpires),
+		CreatedAt:           user.CreatedAt,
+		UpdatedAt:           user.UpdatedAt,
+	})
 	if err != nil {
 		return fmt.Errorf("insert user: %w", err)
 	}
@@ -48,62 +46,132 @@ func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
 }
 
 func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.User, error) {
-	query := `SELECT ` + userSelectColumns + ` FROM users WHERE id = $1 AND deleted_at IS NULL`
-	user, err := scanUser(r.db.QueryRowContext(ctx, query, id))
+	q := sqlc.New(r.db)
+	row, err := q.GetUserByID(ctx, id)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("user not found")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get user: %w", err)
 	}
-	return user, nil
+	return mapSqlcUserToEntity(row), nil
 }
 
 func (r *userRepository) GetByEmail(ctx context.Context, email string) (*entity.User, error) {
-	query := `SELECT ` + userSelectColumns + ` FROM users WHERE email = $1 AND deleted_at IS NULL`
-	user, err := scanUser(r.db.QueryRowContext(ctx, query, email))
+	q := sqlc.New(r.db)
+	row, err := q.GetUserByEmail(ctx, email)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("user not found")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get user by email: %w", err)
 	}
-	return user, nil
+	return mapSqlcUserToEntity(sqlc.GetUserByIDRow(row)), nil
 }
 
 func (r *userRepository) GetByVerifyToken(ctx context.Context, token string) (*entity.User, error) {
-	query := `SELECT ` + userSelectColumns + ` FROM users WHERE email_verify_token = $1 AND deleted_at IS NULL`
-	user, err := scanUser(r.db.QueryRowContext(ctx, query, token))
+	q := sqlc.New(r.db)
+	row, err := q.GetUserByVerifyToken(ctx, sql.NullString{String: token, Valid: token != ""})
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("user not found")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get user by verify token: %w", err)
 	}
-	return user, nil
+	return mapSqlcUserToEntity(sqlc.GetUserByIDRow(row)), nil
 }
 
 func (r *userRepository) GetByResetToken(ctx context.Context, token string) (*entity.User, error) {
-	query := `SELECT ` + userSelectColumns + ` FROM users WHERE password_reset_token = $1 AND deleted_at IS NULL`
-	user, err := scanUser(r.db.QueryRowContext(ctx, query, token))
+	q := sqlc.New(r.db)
+	row, err := q.GetUserByResetToken(ctx, sql.NullString{String: token, Valid: token != ""})
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("user not found")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get user by reset token: %w", err)
 	}
-	return user, nil
+	return mapSqlcUserToEntity(sqlc.GetUserByIDRow(row)), nil
 }
 
 func (r *userRepository) Update(ctx context.Context, user *entity.User) error {
-	query := `UPDATE users SET email = $2, password = $3, name = $4, is_active = $5, updated_at = $6, failed_login_attempts = $7, locked_until = $8, email_verified = $9, email_verify_token = $10, email_verify_expires = $11, password_reset_token = $12, password_reset_expires = $13 WHERE id = $1 AND deleted_at IS NULL`
-	result, err := r.db.ExecContext(ctx, query, user.ID, user.Email, user.Password, user.Name, user.IsActive, user.UpdatedAt, user.FailedLoginAttempts, user.LockedUntil, user.EmailVerified, user.EmailVerifyToken, user.EmailVerifyExpires, user.PasswordResetToken, user.PasswordResetExpires)
+	q := sqlc.New(r.db)
+	rows, err := q.UpdateUser(ctx, sqlc.UpdateUserParams{
+		ID:                  user.ID,
+		Email:               user.Email,
+		Password:            user.Password,
+		Name:                user.Name,
+		IsActive:            user.IsActive,
+		UpdatedAt:           user.UpdatedAt,
+		FailedLoginAttempts: int32(user.FailedLoginAttempts),
+		LockedUntil:         ptrToNullTime(user.LockedUntil),
+		EmailVerified:       sql.NullBool{Bool: user.EmailVerified, Valid: true},
+		EmailVerifyToken:    ptrToNullString(user.EmailVerifyToken),
+		EmailVerifyExpires:  ptrToNullTime(user.EmailVerifyExpires),
+		PasswordResetToken:  ptrToNullString(user.PasswordResetToken),
+		PasswordResetExpires: ptrToNullTime(user.PasswordResetExpires),
+	})
 	if err != nil {
 		return fmt.Errorf("update user: %w", err)
 	}
-	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		return fmt.Errorf("user not found")
 	}
 	return nil
+}
+
+func mapSqlcUserToEntity(row sqlc.GetUserByIDRow) *entity.User {
+	return &entity.User{
+		Entity: domain.Entity{
+			ID:        row.ID,
+			CreatedAt: row.CreatedAt,
+			UpdatedAt: row.UpdatedAt,
+			DeletedAt: nullTimeToPtr(row.DeletedAt),
+		},
+		Email:                row.Email,
+		Password:             row.Password,
+		Name:                 row.Name,
+		IsActive:             row.IsActive,
+		FailedLoginAttempts:  int(row.FailedLoginAttempts),
+		LockedUntil:          nullTimeToPtr(row.LockedUntil),
+		EmailVerified:        nullBoolToValue(row.EmailVerified),
+		EmailVerifyToken:     nullStringToPtr(row.EmailVerifyToken),
+		EmailVerifyExpires:   nullTimeToPtr(row.EmailVerifyExpires),
+		PasswordResetToken:   nullStringToPtr(row.PasswordResetToken),
+		PasswordResetExpires: nullTimeToPtr(row.PasswordResetExpires),
+	}
+}
+
+func nullTimeToPtr(nt sql.NullTime) *time.Time {
+	if nt.Valid {
+		return &nt.Time
+	}
+	return nil
+}
+
+func nullStringToPtr(ns sql.NullString) *string {
+	if ns.Valid {
+		return &ns.String
+	}
+	return nil
+}
+
+func nullBoolToValue(nb sql.NullBool) bool {
+	if nb.Valid {
+		return nb.Bool
+	}
+	return false
+}
+
+func ptrToNullTime(t *time.Time) sql.NullTime {
+	if t != nil {
+		return sql.NullTime{Time: *t, Valid: true}
+	}
+	return sql.NullTime{Valid: false}
+}
+
+func ptrToNullString(s *string) sql.NullString {
+	if s != nil {
+		return sql.NullString{String: *s, Valid: true}
+	}
+	return sql.NullString{Valid: false}
 }
