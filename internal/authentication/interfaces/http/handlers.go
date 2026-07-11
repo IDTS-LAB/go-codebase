@@ -46,15 +46,11 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err := h.svc.Register(r.Context(), req.Email, req.Password, req.Name)
-	if err != nil {
-		if errors.Is(err, service.ErrEmailAlreadyExists) {
-			utils.RespondConflict(w, "email already registered")
-			return
-		}
-		utils.RespondInternalError(w, "failed to register user")
+	if err != nil && errors.Is(err, service.ErrEmailAlreadyExists) {
+		utils.RespondConflict(w, "email already registered")
 		return
 	}
-	utils.RespondCreated(w, dto.MessageResponse{Message: "user registered successfully. Check your email for verification."})
+	utils.HandleCreated(w, dto.MessageResponse{Message: "user registered successfully. Check your email for verification."}, err)
 }
 
 // Login godoc
@@ -95,16 +91,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tokens, err := h.svc.GenerateTokens(r.Context(), user)
-	if err != nil {
-		utils.RespondInternalError(w, "failed to generate tokens")
-		return
-	}
-	utils.RespondSuccess(w, dto.TokenResponse{
+	utils.Handle(w, dto.TokenResponse{
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 		ExpiresIn:    tokens.ExpiresIn,
 		TokenType:    "Bearer",
-	})
+	}, err)
 }
 
 // RefreshToken godoc
@@ -129,20 +121,16 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tokens, err := h.svc.RefreshToken(r.Context(), req.RefreshToken)
-	if err != nil {
-		if errors.Is(err, service.ErrInvalidRefreshToken) {
-			utils.RespondUnauthorized(w, "invalid or expired refresh token")
-			return
-		}
-		utils.RespondInternalError(w, "failed to refresh token")
+	if err != nil && errors.Is(err, service.ErrInvalidRefreshToken) {
+		utils.RespondUnauthorized(w, "invalid or expired refresh token")
 		return
 	}
-	utils.RespondSuccess(w, dto.TokenResponse{
+	utils.Handle(w, dto.TokenResponse{
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 		ExpiresIn:    tokens.ExpiresIn,
 		TokenType:    "Bearer",
-	})
+	}, err)
 }
 
 // Logout godoc
@@ -165,11 +153,8 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	if jti := r.Context().Value("access_token_jti"); jti != nil {
 		accessTokenJTI, _ = jti.(string)
 	}
-	if err := h.svc.Logout(r.Context(), req.RefreshToken, accessTokenJTI, 15*time.Minute); err != nil {
-		utils.RespondInternalError(w, "failed to logout")
-		return
-	}
-	utils.RespondSuccess(w, dto.MessageResponse{Message: "logged out successfully"})
+	err := h.svc.Logout(r.Context(), req.RefreshToken, accessTokenJTI, 15*time.Minute)
+	utils.Handle(w, dto.MessageResponse{Message: "logged out successfully"}, err)
 }
 
 // LogoutAllSessions godoc
@@ -192,11 +177,8 @@ func (h *Handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid user ID")
 		return
 	}
-	if err := h.svc.LogoutAll(r.Context(), uid); err != nil {
-		utils.RespondInternalError(w, "failed to logout all sessions")
-		return
-	}
-	utils.RespondSuccess(w, dto.MessageResponse{Message: "all sessions terminated"})
+	err = h.svc.LogoutAll(r.Context(), uid)
+	utils.Handle(w, dto.MessageResponse{Message: "all sessions terminated"}, err)
 }
 
 // Me godoc
@@ -214,12 +196,12 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		utils.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
 		return
 	}
-	utils.RespondSuccess(w, dto.UserResponse{
+	utils.Handle(w, dto.UserResponse{
 		ID:       userID,
 		Email:    middleware.GetUserEmail(r.Context()),
 		Name:     "",
 		IsActive: true,
-	})
+	}, nil)
 }
 
 // VerifyEmail godoc
@@ -236,15 +218,12 @@ func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "token is required")
 		return
 	}
-	if err := h.svc.VerifyEmail(r.Context(), token); err != nil {
-		if errors.Is(err, service.ErrInvalidVerifyToken) || errors.Is(err, service.ErrVerifyTokenExpired) {
-			utils.RespondBadRequest(w, err.Error())
-			return
-		}
-		utils.RespondInternalError(w, "failed to verify email")
+	err := h.svc.VerifyEmail(r.Context(), token)
+	if err != nil && (errors.Is(err, service.ErrInvalidVerifyToken) || errors.Is(err, service.ErrVerifyTokenExpired)) {
+		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	utils.RespondSuccess(w, map[string]string{"message": "email verified successfully"})
+	utils.Handle(w, map[string]string{"message": "email verified successfully"}, err)
 }
 
 // ForgotPassword godoc
@@ -290,15 +269,12 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	if err := h.svc.ResetPassword(r.Context(), req.Token, req.NewPassword); err != nil {
-		if errors.Is(err, service.ErrInvalidResetToken) || errors.Is(err, service.ErrResetTokenExpired) {
-			utils.RespondBadRequest(w, err.Error())
-			return
-		}
-		utils.RespondInternalError(w, "failed to reset password")
+	err := h.svc.ResetPassword(r.Context(), req.Token, req.NewPassword)
+	if err != nil && (errors.Is(err, service.ErrInvalidResetToken) || errors.Is(err, service.ErrResetTokenExpired)) {
+		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	utils.RespondSuccess(w, map[string]string{"message": "password reset successfully"})
+	utils.Handle(w, map[string]string{"message": "password reset successfully"}, err)
 }
 
 // ResendVerification godoc
