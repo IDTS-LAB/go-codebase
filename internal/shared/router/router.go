@@ -32,6 +32,8 @@ func NewRouter(h Handlers, mw middleware.Registry, log domain.Logger, cfg *confi
 	registerWeb(r, cfg)
 
 	r.Route(APIPrefix, func(r chi.Router) {
+		r.Use(middleware.ResponseFormatter())
+
 		r.Group(func(r chi.Router) {
 			r.Use(mw.MaxBodySize)
 			r.Use(mw.Idempotency)
