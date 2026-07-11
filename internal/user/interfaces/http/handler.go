@@ -47,8 +47,8 @@ type ListResponse struct {
 // @Produce json
 // @Param limit query int false "Page size" default(20)
 // @Param offset query int false "Offset" default(0)
-// @Success 200 {object} utils.SuccessResponse{data=ListResponse}
-// @Failure 500 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=ListResponse}
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /users [get]
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
@@ -92,9 +92,9 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 // @Tags users
 // @Produce json
 // @Param id path string true "User ID"
-// @Success 200 {object} utils.SuccessResponse{data=UserResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=UserResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /users/{id} [get]
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
@@ -125,8 +125,8 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 // @Description Get the authenticated user's profile
 // @Tags users
 // @Produce json
-// @Success 200 {object} utils.SuccessResponse{data=UserResponse}
-// @Failure 401 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=UserResponse}
+// @Failure 401 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /users/me [get]
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
@@ -166,9 +166,9 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param id path string true "User ID"
 // @Param request body UpdateUserRequest true "Update details"
-// @Success 200 {object} utils.SuccessResponse{data=UserResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=UserResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /users/{id} [put]
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
@@ -211,9 +211,9 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 // @Tags users
 // @Produce json
 // @Param id path string true "User ID"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /users/{id} [delete]
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {

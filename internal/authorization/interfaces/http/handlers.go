@@ -30,9 +30,9 @@ func NewHandler(svc *service.AuthorizationService, v *validator.Validator) *Hand
 // @Accept json
 // @Produce json
 // @Param request body dto.CreateRoleRequest true "Role to create"
-// @Success 201 {object} utils.SuccessResponse{data=dto.RoleResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 409 {object} utils.ErrorResponse
+// @Success 201 {object} utils.APIResponse{data=dto.RoleResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 409 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/roles [post]
 func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
@@ -60,8 +60,8 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param page query int false "Page number" default(1)
 // @Param per_page query int false "Items per page" default(20)
-// @Success 200 {object} utils.SuccessResponse{data=dto.ListResponse}
-// @Failure 500 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.ListResponse}
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/roles [get]
 func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
@@ -86,8 +86,8 @@ func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
 // @Tags authorization
 // @Produce json
 // @Param id path string true "Role ID"
-// @Success 200 {object} utils.SuccessResponse{data=dto.RoleResponse}
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.RoleResponse}
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/roles/{id} [get]
 func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
@@ -112,9 +112,9 @@ func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param id path string true "Role ID"
 // @Param request body dto.UpdateRoleRequest true "Fields to update"
-// @Success 200 {object} utils.SuccessResponse{data=dto.RoleResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.RoleResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/roles/{id} [put]
 func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
@@ -141,8 +141,8 @@ func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 // @Description Delete a role by ID
 // @Tags authorization
 // @Param id path string true "Role ID"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/roles/{id} [delete]
 func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
@@ -165,9 +165,9 @@ func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param request body dto.CreatePermissionRequest true "Permission to create"
-// @Success 201 {object} utils.SuccessResponse{data=dto.PermissionResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 409 {object} utils.ErrorResponse
+// @Success 201 {object} utils.APIResponse{data=dto.PermissionResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 409 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/permissions [post]
 func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
@@ -195,8 +195,8 @@ func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param page query int false "Page number" default(1)
 // @Param per_page query int false "Items per page" default(20)
-// @Success 200 {object} utils.SuccessResponse{data=dto.ListResponse}
-// @Failure 500 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.ListResponse}
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/permissions [get]
 func (h *Handler) ListPermissions(w http.ResponseWriter, r *http.Request) {
@@ -221,8 +221,8 @@ func (h *Handler) ListPermissions(w http.ResponseWriter, r *http.Request) {
 // @Tags authorization
 // @Produce json
 // @Param id path string true "Permission ID"
-// @Success 200 {object} utils.SuccessResponse{data=dto.PermissionResponse}
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.PermissionResponse}
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/permissions/{id} [get]
 func (h *Handler) GetPermission(w http.ResponseWriter, r *http.Request) {
@@ -247,9 +247,9 @@ func (h *Handler) GetPermission(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param id path string true "Permission ID"
 // @Param request body dto.UpdatePermissionRequest true "Fields to update"
-// @Success 200 {object} utils.SuccessResponse{data=dto.PermissionResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.PermissionResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/permissions/{id} [put]
 func (h *Handler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
@@ -276,8 +276,8 @@ func (h *Handler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
 // @Description Delete a permission by ID
 // @Tags authorization
 // @Param id path string true "Permission ID"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/permissions/{id} [delete]
 func (h *Handler) DeletePermission(w http.ResponseWriter, r *http.Request) {
@@ -301,8 +301,8 @@ func (h *Handler) DeletePermission(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param userId path string true "User ID"
 // @Param request body dto.AssignRoleRequest true "Role to assign"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/users/{userId}/roles [post]
 func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
@@ -328,8 +328,8 @@ func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
 // @Tags authorization
 // @Param userId path string true "User ID"
 // @Param roleId path string true "Role ID"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/users/{userId}/roles/{roleId} [delete]
 func (h *Handler) RemoveRole(w http.ResponseWriter, r *http.Request) {
@@ -356,8 +356,8 @@ func (h *Handler) RemoveRole(w http.ResponseWriter, r *http.Request) {
 // @Tags authorization
 // @Produce json
 // @Param userId path string true "User ID"
-// @Success 200 {object} utils.SuccessResponse{data=[]dto.RoleResponse}
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=[]dto.RoleResponse}
+// @Failure 400 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/users/{userId}/roles [get]
 func (h *Handler) GetUserRoles(w http.ResponseWriter, r *http.Request) {
@@ -382,8 +382,8 @@ func (h *Handler) GetUserRoles(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param roleId path string true "Role ID"
 // @Param request body dto.AssignPermissionRequest true "Permission to assign"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/roles/{roleId}/permissions [post]
 func (h *Handler) AssignPermission(w http.ResponseWriter, r *http.Request) {
@@ -409,8 +409,8 @@ func (h *Handler) AssignPermission(w http.ResponseWriter, r *http.Request) {
 // @Tags authorization
 // @Param roleId path string true "Role ID"
 // @Param permissionId path string true "Permission ID"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/roles/{roleId}/permissions/{permissionId} [delete]
 func (h *Handler) RemovePermission(w http.ResponseWriter, r *http.Request) {
@@ -437,8 +437,8 @@ func (h *Handler) RemovePermission(w http.ResponseWriter, r *http.Request) {
 // @Tags authorization
 // @Produce json
 // @Param roleId path string true "Role ID"
-// @Success 200 {object} utils.SuccessResponse{data=[]dto.PermissionResponse}
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=[]dto.PermissionResponse}
+// @Failure 400 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/roles/{roleId}/permissions [get]
 func (h *Handler) GetRolePermissions(w http.ResponseWriter, r *http.Request) {
@@ -462,9 +462,9 @@ func (h *Handler) GetRolePermissions(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param request body dto.CheckPermissionRequest true "Permission to check"
-// @Success 200 {object} utils.SuccessResponse{data=dto.CheckPermissionResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 401 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.CheckPermissionResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 401 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/check-permission [post]
 func (h *Handler) CheckPermission(w http.ResponseWriter, r *http.Request) {

@@ -30,10 +30,10 @@ func NewHandler(svc *service.AuthenticationService, v *validator.Validator) *Han
 // @Accept json
 // @Produce json
 // @Param request body dto.RegisterRequest true "Registration details"
-// @Success 201 {object} utils.SuccessResponse{data=dto.TokenResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 409 {object} utils.ErrorResponse
-// @Failure 500 {object} utils.ErrorResponse
+// @Success 201 {object} utils.APIResponse{data=dto.TokenResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 409 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
 // @Router /auth/register [post]
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req dto.RegisterRequest
@@ -64,9 +64,9 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param request body dto.LoginRequest true "Login credentials"
-// @Success 200 {object} utils.SuccessResponse{data=dto.TokenResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 401 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.TokenResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 401 {object} utils.APIResponse
 // @Router /auth/login [post]
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req dto.LoginRequest
@@ -114,9 +114,9 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param request body dto.RefreshRequest true "Refresh token"
-// @Success 200 {object} utils.SuccessResponse{data=dto.TokenResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 401 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.TokenResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 401 {object} utils.APIResponse
 // @Router /auth/refresh [post]
 func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	var req dto.RefreshRequest
@@ -152,8 +152,8 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param request body dto.RefreshRequest true "Refresh token to revoke"
-// @Success 200 {object} utils.SuccessResponse{data=dto.MessageResponse}
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.MessageResponse}
+// @Failure 400 {object} utils.APIResponse
 // @Router /auth/logout [post]
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	var req dto.RefreshRequest
@@ -177,8 +177,8 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 // @Description Revoke all refresh tokens for the current user
 // @Tags authentication
 // @Produce json
-// @Success 200 {object} utils.SuccessResponse{data=dto.MessageResponse}
-// @Failure 401 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.MessageResponse}
+// @Failure 401 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/logout-all [post]
 func (h *Handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
@@ -204,8 +204,8 @@ func (h *Handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 // @Description Get the authenticated user's profile
 // @Tags authentication
 // @Produce json
-// @Success 200 {object} utils.SuccessResponse{data=dto.UserResponse}
-// @Failure 401 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.UserResponse}
+// @Failure 401 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/me [get]
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
@@ -227,8 +227,8 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 // @Description Verify user email with token from email
 // @Tags authentication
 // @Param token query string true "Verification token"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
 // @Router /auth/verify-email [get]
 func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
@@ -254,7 +254,7 @@ func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param request body dto.ForgotPasswordRequest true "Email address"
-// @Success 200 {object} utils.SuccessResponse
+// @Success 200 {object} utils.APIResponse
 // @Router /auth/forgot-password [post]
 func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	var req dto.ForgotPasswordRequest
@@ -277,8 +277,8 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param request body dto.ResetPasswordRequest true "Token and new password"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
 // @Router /auth/reset-password [post]
 func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	var req dto.ResetPasswordRequest
@@ -308,7 +308,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param request body dto.ResendVerificationRequest true "Email address"
-// @Success 200 {object} utils.SuccessResponse
+// @Success 200 {object} utils.APIResponse
 // @Router /auth/resend-verification [post]
 func (h *Handler) ResendVerification(w http.ResponseWriter, r *http.Request) {
 	var req dto.ResendVerificationRequest

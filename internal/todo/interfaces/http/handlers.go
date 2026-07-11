@@ -31,9 +31,9 @@ func NewHandler(appService *appService.TodoAppService, v *validator.Validator) *
 // @Accept json
 // @Produce json
 // @Param request body dto.CreateTodoRequest true "Todo to create"
-// @Success 201 {object} utils.SuccessResponse{data=dto.TodoResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 500 {object} utils.ErrorResponse
+// @Success 201 {object} utils.APIResponse{data=dto.TodoResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /todos [post]
 func (h *Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
@@ -65,8 +65,8 @@ func (h *Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param page query int false "Page number" default(1)
 // @Param per_page query int false "Items per page" default(20)
-// @Success 200 {object} utils.SuccessResponse{data=dto.TodoListResponse}
-// @Failure 500 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.TodoListResponse}
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /todos [get]
 func (h *Handler) ListTodos(w http.ResponseWriter, r *http.Request) {
@@ -95,9 +95,9 @@ func (h *Handler) ListTodos(w http.ResponseWriter, r *http.Request) {
 // @Tags todos
 // @Produce json
 // @Param id path string true "Todo ID"
-// @Success 200 {object} utils.SuccessResponse{data=dto.TodoResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.TodoResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /todos/{id} [get]
 func (h *Handler) GetTodo(w http.ResponseWriter, r *http.Request) {
@@ -126,9 +126,9 @@ func (h *Handler) GetTodo(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param id path string true "Todo ID"
 // @Param request body dto.UpdateTodoRequest true "Fields to update"
-// @Success 200 {object} utils.SuccessResponse{data=dto.TodoResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.TodoResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /todos/{id} [put]
 func (h *Handler) UpdateTodo(w http.ResponseWriter, r *http.Request) {
@@ -163,9 +163,9 @@ func (h *Handler) UpdateTodo(w http.ResponseWriter, r *http.Request) {
 // @Description Delete a todo item by ID
 // @Tags todos
 // @Param id path string true "Todo ID"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /todos/{id} [delete]
 func (h *Handler) DeleteTodo(w http.ResponseWriter, r *http.Request) {
@@ -190,10 +190,10 @@ func (h *Handler) DeleteTodo(w http.ResponseWriter, r *http.Request) {
 // @Description Mark a todo item as completed
 // @Tags todos
 // @Param id path string true "Todo ID"
-// @Success 200 {object} utils.SuccessResponse{data=dto.TodoResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
-// @Failure 409 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.TodoResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
+// @Failure 409 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /todos/{id}/complete [patch]
 func (h *Handler) CompleteTodo(w http.ResponseWriter, r *http.Request) {
@@ -225,9 +225,9 @@ func (h *Handler) CompleteTodo(w http.ResponseWriter, r *http.Request) {
 // @Param q query string true "Search query"
 // @Param page query int false "Page number" default(1)
 // @Param per_page query int false "Items per page" default(20)
-// @Success 200 {object} utils.SuccessResponse{data=dto.TodoListResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 500 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.TodoListResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /todos/search [get]
 func (h *Handler) SearchTodos(w http.ResponseWriter, r *http.Request) {
