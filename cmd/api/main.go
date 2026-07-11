@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
@@ -52,6 +53,7 @@ func main() {
 		userHandler  *userHTTP.Handler
 		enforcer     *casbin.Enforcer
 		log          domain.Logger
+		db           *sql.DB
 		rdb          *redis.Client
 		tokenSvc     domain.TokenService
 		errorRepo    *auditlog.Repository
@@ -102,6 +104,7 @@ func main() {
 		fx.Populate(&userHandler),
 		fx.Populate(&enforcer),
 		fx.Populate(&log),
+		fx.Populate(&db),
 		fx.Populate(&rdb),
 		fx.Populate(&tokenSvc),
 		fx.Populate(&errorRepo),
@@ -122,13 +125,14 @@ func main() {
 		Todo:  todoHTTP.NewRouter(todoHandler, mw.Auth, enforcer),
 		Authz: authzHTTP.NewRouter(authzHandler, mw.Auth, enforcer),
 		User:  userHTTP.NewRouter(userHandler, mw.Auth, enforcer),
-	}, mw, log, cfg)
+	}, mw, log, cfg, db)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
 		Handler:      root,
 		ReadTimeout:  time.Duration(cfg.Server.ReadTimeout) * time.Second,
 		WriteTimeout: time.Duration(cfg.Server.WriteTimeout) * time.Second,
+		IdleTimeout:  time.Duration(cfg.Server.IdleTimeout) * time.Second,
 	}
 
 	go func() {
@@ -141,7 +145,7 @@ func main() {
 
 	<-ctx.Done()
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutdownCancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {

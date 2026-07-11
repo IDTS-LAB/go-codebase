@@ -1,6 +1,8 @@
 package router
 
 import (
+	"database/sql"
+
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/config"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
@@ -16,7 +18,7 @@ type Handlers struct {
 	User  *chi.Mux
 }
 
-func NewRouter(h Handlers, mw middleware.Registry, log domain.Logger, cfg *config.Config) *chi.Mux {
+func NewRouter(h Handlers, mw middleware.Registry, log domain.Logger, cfg *config.Config, db *sql.DB) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(mw.Tracing)
@@ -29,7 +31,7 @@ func NewRouter(h Handlers, mw middleware.Registry, log domain.Logger, cfg *confi
 	r.Use(mw.RateLimit)
 	r.Use(middleware.Logger(log))
 
-	registerWeb(r, cfg)
+	registerWeb(r, cfg, db)
 
 	r.Route(APIPrefix, func(r chi.Router) {
 		r.Use(middleware.ResponseFormatter())

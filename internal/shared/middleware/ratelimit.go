@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -15,12 +14,9 @@ func RateLimit(rdb *redis.Client, limit int, window time.Duration) func(http.Han
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip := r.RemoteAddr
-			if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-				ip = fwd
-			}
 
 			key := fmt.Sprintf("ratelimit:%s", ip)
-			ctx := context.Background()
+			ctx := r.Context()
 
 			count, err := rdb.Incr(ctx, key).Result()
 			if err != nil {

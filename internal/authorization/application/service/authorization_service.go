@@ -10,12 +10,18 @@ import (
 	"github.com/google/uuid"
 )
 
+type Enforcer interface {
+	ReloadPolicies(ctx context.Context) error
+	ReloadUserPolicies(ctx context.Context, userID uuid.UUID) error
+	Enforce(userID uuid.UUID, resource, action string) (bool, error)
+}
+
 type AuthorizationService struct {
 	roleRepo     repository.RoleRepository
 	permRepo     repository.PermissionRepository
 	userRoleRepo repository.UserRoleRepository
 	rolePermRepo repository.RolePermissionRepository
-	enforcer     *casbin.Enforcer
+	enforcer     Enforcer
 }
 
 func NewAuthorizationService(

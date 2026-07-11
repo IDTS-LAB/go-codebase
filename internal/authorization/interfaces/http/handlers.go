@@ -1,12 +1,14 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/dto"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/service"
+	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/entity"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
@@ -14,8 +16,28 @@ import (
 	"github.com/google/uuid"
 )
 
+type AuthorizationService interface {
+	CreateRole(ctx context.Context, name, description string) (*entity.Role, error)
+	ListRoles(ctx context.Context, page, perPage int) ([]*entity.Role, int, error)
+	GetRole(ctx context.Context, id uuid.UUID) (*entity.Role, error)
+	UpdateRole(ctx context.Context, id uuid.UUID, name, description string) (*entity.Role, error)
+	DeleteRole(ctx context.Context, id uuid.UUID) error
+	CreatePermission(ctx context.Context, name, description, resource, action string) (*entity.Permission, error)
+	ListPermissions(ctx context.Context, page, perPage int) ([]*entity.Permission, int, error)
+	GetPermission(ctx context.Context, id uuid.UUID) (*entity.Permission, error)
+	UpdatePermission(ctx context.Context, id uuid.UUID, name, description, resource, action string) (*entity.Permission, error)
+	DeletePermission(ctx context.Context, id uuid.UUID) error
+	AssignRoleToUser(ctx context.Context, userID, roleID uuid.UUID) error
+	RemoveRoleFromUser(ctx context.Context, userID, roleID uuid.UUID) error
+	GetUserRoles(ctx context.Context, userID uuid.UUID) ([]*entity.Role, error)
+	AssignPermissionToRole(ctx context.Context, roleID, permissionID uuid.UUID) error
+	RemovePermissionFromRole(ctx context.Context, roleID, permissionID uuid.UUID) error
+	GetRolePermissions(ctx context.Context, roleID uuid.UUID) ([]*entity.Permission, error)
+	CheckPermission(ctx context.Context, userID uuid.UUID, resource, action string) (bool, error)
+}
+
 type Handler struct {
-	svc       *service.AuthorizationService
+	svc       AuthorizationService
 	validator *validator.Validator
 }
 

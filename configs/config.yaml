@@ -55,7 +55,7 @@ auth:
   token_denylist: true
 
 cors:
-  allowed_origins: ["*"]
+  allowed_origins: ["http://localhost:3000", "http://localhost:8080"]
   allowed_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
   allowed_headers: ["Accept", "Authorization", "Content-Type", "X-Request-ID"]
   allow_credentials: true
