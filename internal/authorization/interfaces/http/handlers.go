@@ -46,11 +46,7 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role, err := h.svc.CreateRole(r.Context(), req.Name, req.Description)
-	if err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondCreated(w, role)
+	utils.HandleCreated(w, role, err)
 }
 
 // ListRoles godoc
@@ -73,11 +69,7 @@ func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
 		fmt.Sscanf(pp, "%d", &perPage)
 	}
 	roles, total, err := h.svc.ListRoles(r.Context(), page, perPage)
-	if err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondPaginated(w, roles, page, perPage, total)
+	utils.HandlePaginated(w, roles, page, perPage, total, err)
 }
 
 // GetRole godoc
@@ -97,11 +89,7 @@ func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role, err := h.svc.GetRole(r.Context(), id)
-	if err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondSuccess(w, role)
+	utils.Handle(w, role, err)
 }
 
 // UpdateRole godoc
@@ -129,11 +117,7 @@ func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role, err := h.svc.UpdateRole(r.Context(), id, req.Name, req.Description)
-	if err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondSuccess(w, role)
+	utils.Handle(w, role, err)
 }
 
 // DeleteRole godoc
@@ -151,11 +135,8 @@ func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid role ID")
 		return
 	}
-	if err := h.svc.DeleteRole(r.Context(), id); err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondSuccess(w, nil)
+	err = h.svc.DeleteRole(r.Context(), id)
+	utils.HandleNoContent(w, err)
 }
 
 // CreatePermission godoc
@@ -181,11 +162,7 @@ func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	perm, err := h.svc.CreatePermission(r.Context(), req.Name, req.Description, req.Resource, req.Action)
-	if err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondCreated(w, perm)
+	utils.HandleCreated(w, perm, err)
 }
 
 // ListPermissions godoc
@@ -208,11 +185,7 @@ func (h *Handler) ListPermissions(w http.ResponseWriter, r *http.Request) {
 		fmt.Sscanf(pp, "%d", &perPage)
 	}
 	perms, total, err := h.svc.ListPermissions(r.Context(), page, perPage)
-	if err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondPaginated(w, perms, page, perPage, total)
+	utils.HandlePaginated(w, perms, page, perPage, total, err)
 }
 
 // GetPermission godoc
@@ -232,11 +205,7 @@ func (h *Handler) GetPermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	perm, err := h.svc.GetPermission(r.Context(), id)
-	if err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondSuccess(w, perm)
+	utils.Handle(w, perm, err)
 }
 
 // UpdatePermission godoc
@@ -264,11 +233,7 @@ func (h *Handler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	perm, err := h.svc.UpdatePermission(r.Context(), id, req.Name, req.Description, req.Resource, req.Action)
-	if err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondSuccess(w, perm)
+	utils.Handle(w, perm, err)
 }
 
 // DeletePermission godoc
@@ -286,11 +251,8 @@ func (h *Handler) DeletePermission(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid permission ID")
 		return
 	}
-	if err := h.svc.DeletePermission(r.Context(), id); err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondSuccess(w, nil)
+	err = h.svc.DeletePermission(r.Context(), id)
+	utils.HandleNoContent(w, err)
 }
 
 // AssignRole godoc
@@ -315,11 +277,8 @@ func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	if err := h.svc.AssignRoleToUser(r.Context(), req.UserID, req.RoleID); err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondSuccess(w, nil)
+	err := h.svc.AssignRoleToUser(r.Context(), req.UserID, req.RoleID)
+	utils.HandleNoContent(w, err)
 }
 
 // RemoveRole godoc
@@ -343,11 +302,8 @@ func (h *Handler) RemoveRole(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid role ID")
 		return
 	}
-	if err := h.svc.RemoveRoleFromUser(r.Context(), userID, roleID); err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondSuccess(w, nil)
+	err = h.svc.RemoveRoleFromUser(r.Context(), userID, roleID)
+	utils.HandleNoContent(w, err)
 }
 
 // GetUserRoles godoc
@@ -367,11 +323,7 @@ func (h *Handler) GetUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	roles, err := h.svc.GetUserRoles(r.Context(), userID)
-	if err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondSuccess(w, roles)
+	utils.Handle(w, roles, err)
 }
 
 // AssignPermission godoc
@@ -396,11 +348,8 @@ func (h *Handler) AssignPermission(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	if err := h.svc.AssignPermissionToRole(r.Context(), req.RoleID, req.PermissionID); err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondSuccess(w, nil)
+	err := h.svc.AssignPermissionToRole(r.Context(), req.RoleID, req.PermissionID)
+	utils.HandleNoContent(w, err)
 }
 
 // RemovePermission godoc
@@ -424,11 +373,8 @@ func (h *Handler) RemovePermission(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid permission ID")
 		return
 	}
-	if err := h.svc.RemovePermissionFromRole(r.Context(), roleID, permID); err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondSuccess(w, nil)
+	err = h.svc.RemovePermissionFromRole(r.Context(), roleID, permID)
+	utils.HandleNoContent(w, err)
 }
 
 // GetRolePermissions godoc
@@ -448,11 +394,7 @@ func (h *Handler) GetRolePermissions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	perms, err := h.svc.GetRolePermissions(r.Context(), roleID)
-	if err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondSuccess(w, perms)
+	utils.Handle(w, perms, err)
 }
 
 // CheckPermission godoc
@@ -488,9 +430,5 @@ func (h *Handler) CheckPermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	allowed, err := h.svc.CheckPermission(r.Context(), uid, req.Resource, req.Action)
-	if err != nil {
-		utils.MapError(w, err)
-		return
-	}
-	utils.RespondSuccess(w, dto.CheckPermissionResponse{Allowed: allowed})
+	utils.Handle(w, dto.CheckPermissionResponse{Allowed: allowed}, err)
 }

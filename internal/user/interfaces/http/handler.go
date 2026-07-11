@@ -63,7 +63,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	users, total, err := h.svc.List(r.Context(), offset, limit)
 	if err != nil {
-		utils.MapError(w, err)
+		utils.HandlePaginated(w, nil, 0, 0, 0, err)
 		return
 	}
 
@@ -106,7 +106,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.svc.GetByID(r.Context(), id)
 	if err != nil {
-		utils.MapError(w, err)
+		utils.Handle(w, nil, err)
 		return
 	}
 
@@ -144,7 +144,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.svc.GetByID(r.Context(), id)
 	if err != nil {
-		utils.MapError(w, err)
+		utils.Handle(w, nil, err)
 		return
 	}
 
@@ -191,7 +191,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.svc.Update(r.Context(), id, req.Name, req.Email, isActive)
 	if err != nil {
-		utils.MapError(w, err)
+		utils.Handle(w, nil, err)
 		return
 	}
 
@@ -223,10 +223,6 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.Delete(r.Context(), id); err != nil {
-		utils.MapError(w, err)
-		return
-	}
-
-	utils.RespondSuccess(w, map[string]string{"message": "user deleted"})
+	err = h.svc.Delete(r.Context(), id)
+	utils.Handle(w, map[string]string{"message": "user deleted"}, err)
 }
