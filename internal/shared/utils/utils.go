@@ -27,6 +27,18 @@ type ErrorBody struct {
 	Message string `json:"message"`
 }
 
+type PaginatedPayload[T any] struct {
+	Data       []T            `json:"data"`
+	Pagination PaginationMeta `json:"pagination"`
+}
+
+type PaginatedResult[T any] struct {
+	Data    []T
+	Page    int
+	PerPage int
+	Total   int
+}
+
 func RespondJSON(w http.ResponseWriter, status int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
