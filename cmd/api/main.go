@@ -13,7 +13,6 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/authentication"
 	authEventBus "github.com/IDTS-LAB/go-codebase/internal/authentication/infrastructure/eventbus"
 	authHTTP "github.com/IDTS-LAB/go-codebase/internal/authentication/interfaces/http"
-	"github.com/IDTS-LAB/go-codebase/internal/authentication/application/service"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/infrastructure/casbin"
 	authzHTTP "github.com/IDTS-LAB/go-codebase/internal/authorization/interfaces/http"
@@ -24,6 +23,7 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/logger"
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/messaging"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/auditlog"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/events"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/config"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/database"
@@ -67,6 +67,7 @@ func main() {
 		fx.Supply(cfg),
 
 		// Infrastructure
+		cqrs.Module,
 		logger.Module,
 		cache.Module,
 		auth.Module,
@@ -93,16 +94,6 @@ func main() {
 		// Event handlers
 		fx.Invoke(func(bus events.EventBus, eh *authEventBus.EmailHandler) {
 			eh.Register(bus)
-		}),
-
-		// Denylist helper
-		fx.Invoke(func(authSvc *service.AuthenticationService, rdb *redis.Client, cfg *config.Config) {
-			if cfg.Auth.TokenDenylist {
-				authSvc.SetDenylist(func(ctx context.Context, jti string, ttl time.Duration) error {
-					return rdb.Set(ctx, "token:blacklist:"+jti, "1", ttl).Err()
-				})
-			}
-			authSvc.SetLockoutConfig(cfg.Auth.MaxLoginAttempts, time.Duration(cfg.Auth.LockoutDuration)*time.Second)
 		}),
 
 		// Extract

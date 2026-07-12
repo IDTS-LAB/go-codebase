@@ -8,12 +8,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/events"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/application/dto"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/application/query"
-	appService "github.com/IDTS-LAB/go-codebase/internal/todo/application/service"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/entity"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/service"
 	httpHandler "github.com/IDTS-LAB/go-codebase/internal/todo/interfaces/http"
@@ -66,17 +66,20 @@ func setupHandler(t *testing.T) (*httpHandler.Handler, *MockTodoRepo) {
 	domainSvc := service.NewTodoDomainService(repo)
 	eventBus := events.NewInMemoryEventBus()
 
-	createH := command.NewCreateTodoHandler(domainSvc, eventBus)
-	updateH := command.NewUpdateTodoHandler(domainSvc, eventBus)
-	deleteH := command.NewDeleteTodoHandler(domainSvc, eventBus)
-	completeH := command.NewCompleteTodoHandler(domainSvc, eventBus)
-	getH := query.NewGetTodoHandler(domainSvc)
-	listH := query.NewListTodosHandler(domainSvc)
-	searchH := query.NewSearchTodosHandler(domainSvc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
 
-	appSvc := appService.NewTodoAppService(createH, updateH, deleteH, completeH, getH, listH, searchH)
+	cmdBus.Register(command.CreateTodoCommand{}, command.NewCreateTodoHandler(domainSvc, eventBus))
+	cmdBus.Register(command.UpdateTodoCommand{}, command.NewUpdateTodoHandler(domainSvc, eventBus))
+	cmdBus.Register(command.DeleteTodoCommand{}, command.NewDeleteTodoHandler(domainSvc, eventBus))
+	cmdBus.Register(command.CompleteTodoCommand{}, command.NewCompleteTodoHandler(domainSvc, eventBus))
+
+	qBus.Register(query.GetTodoQuery{}, query.NewGetTodoHandler(domainSvc))
+	qBus.Register(query.ListTodosQuery{}, query.NewListTodosHandler(domainSvc))
+	qBus.Register(query.SearchTodosQuery{}, query.NewSearchTodosHandler(domainSvc))
+
 	v := validator.New()
-	h := httpHandler.NewHandler(appSvc, v)
+	h := httpHandler.NewHandler(cmdBus, qBus, v)
 	return h, repo
 }
 

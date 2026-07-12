@@ -6,22 +6,25 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
+	"github.com/IDTS-LAB/go-codebase/internal/todo/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/application/dto"
-	appService "github.com/IDTS-LAB/go-codebase/internal/todo/application/service"
+	"github.com/IDTS-LAB/go-codebase/internal/todo/application/query"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 type Handler struct {
-	appService *appService.TodoAppService
+	commandBus cqrs.CommandBus
+	queryBus   cqrs.QueryBus
 	validator  *validator.Validator
 }
 
-func NewHandler(appService *appService.TodoAppService, v *validator.Validator) *Handler {
-	return &Handler{appService: appService, validator: v}
+func NewHandler(commandBus cqrs.CommandBus, queryBus cqrs.QueryBus, v *validator.Validator) *Handler {
+	return &Handler{commandBus: commandBus, queryBus: queryBus, validator: v}
 }
 
 // CreateTodo godoc
@@ -46,7 +49,10 @@ func (h *Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	resp, err := h.appService.CreateTodo(r.Context(), req)
+	resp, err := h.commandBus.Dispatch(r.Context(), command.CreateTodoCommand{
+		Title:       req.Title,
+		Description: req.Description,
+	})
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidTitle) {
 			utils.RespondBadRequest(w, err.Error())
@@ -79,8 +85,13 @@ func (h *Handler) ListTodos(w http.ResponseWriter, r *http.Request) {
 	if perPage > 100 {
 		perPage = 100
 	}
-	resp, err := h.appService.ListTodos(r.Context(), page, perPage)
-	utils.HandlePaginated(w, resp.Todos, page, perPage, resp.Total, err)
+	resp, err := h.queryBus.Ask(r.Context(), query.ListTodosQuery{Page: page, PerPage: perPage})
+	if err != nil {
+		utils.HandlePaginated(w, nil, 0, 0, 0, err)
+		return
+	}
+	result := resp.(dto.TodoListResponse)
+	utils.RespondPaginated(w, result.Todos, page, perPage, result.Total)
 }
 
 // GetTodo godoc
@@ -100,12 +111,16 @@ func (h *Handler) GetTodo(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid todo ID")
 		return
 	}
-	resp, err := h.appService.GetTodo(r.Context(), id)
-	if err != nil && errors.Is(err, service.ErrTodoNotFound) {
-		utils.RespondNotFound(w, "todo not found")
+	resp, err := h.queryBus.Ask(r.Context(), query.GetTodoQuery{ID: id})
+	if err != nil {
+		if errors.Is(err, service.ErrTodoNotFound) {
+			utils.RespondNotFound(w, "todo not found")
+			return
+		}
+		utils.Handle(w, nil, err)
 		return
 	}
-	utils.Handle(w, resp, err)
+	utils.RespondSuccess(w, resp)
 }
 
 // UpdateTodo godoc
@@ -136,12 +151,20 @@ func (h *Handler) UpdateTodo(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	resp, err := h.appService.UpdateTodo(r.Context(), id, req)
-	if err != nil && errors.Is(err, service.ErrTodoNotFound) {
-		utils.RespondNotFound(w, "todo not found")
+	resp, err := h.commandBus.Dispatch(r.Context(), command.UpdateTodoCommand{
+		ID:          id,
+		Title:       req.Title,
+		Description: req.Description,
+	})
+	if err != nil {
+		if errors.Is(err, service.ErrTodoNotFound) {
+			utils.RespondNotFound(w, "todo not found")
+			return
+		}
+		utils.Handle(w, nil, err)
 		return
 	}
-	utils.Handle(w, resp, err)
+	utils.RespondSuccess(w, resp)
 }
 
 // DeleteTodo godoc
@@ -160,12 +183,16 @@ func (h *Handler) DeleteTodo(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid todo ID")
 		return
 	}
-	err = h.appService.DeleteTodo(r.Context(), id)
-	if err != nil && errors.Is(err, service.ErrTodoNotFound) {
-		utils.RespondNotFound(w, "todo not found")
+	_, err = h.commandBus.Dispatch(r.Context(), command.DeleteTodoCommand{ID: id})
+	if err != nil {
+		if errors.Is(err, service.ErrTodoNotFound) {
+			utils.RespondNotFound(w, "todo not found")
+			return
+		}
+		utils.Handle(w, nil, err)
 		return
 	}
-	utils.HandleNoContent(w, err)
+	utils.RespondSuccess(w, map[string]string{"message": "todo deleted"})
 }
 
 // CompleteTodo godoc
@@ -185,7 +212,7 @@ func (h *Handler) CompleteTodo(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid todo ID")
 		return
 	}
-	resp, err := h.appService.CompleteTodo(r.Context(), id)
+	resp, err := h.commandBus.Dispatch(r.Context(), command.CompleteTodoCommand{ID: id})
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrTodoNotFound):
@@ -227,6 +254,11 @@ func (h *Handler) SearchTodos(w http.ResponseWriter, r *http.Request) {
 	if pp := r.URL.Query().Get("per_page"); pp != "" {
 		fmt.Sscanf(pp, "%d", &perPage)
 	}
-	resp, err := h.appService.SearchTodos(r.Context(), queryStr, page, perPage)
-	utils.HandlePaginated(w, resp.Todos, page, perPage, resp.Total, err)
+	resp, err := h.queryBus.Ask(r.Context(), query.SearchTodosQuery{Query: queryStr, Page: page, PerPage: perPage})
+	if err != nil {
+		utils.HandlePaginated(w, nil, 0, 0, 0, err)
+		return
+	}
+	result := resp.(dto.TodoListResponse)
+	utils.RespondPaginated(w, result.Todos, page, perPage, result.Total)
 }

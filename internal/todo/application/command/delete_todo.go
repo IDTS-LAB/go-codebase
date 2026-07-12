@@ -23,18 +23,19 @@ func NewDeleteTodoHandler(domainSvc *service.TodoDomainService, eventBus events.
 	return &DeleteTodoHandler{domainSvc: domainSvc, eventBus: eventBus}
 }
 
-func (h *DeleteTodoHandler) Handle(ctx context.Context, cmd DeleteTodoCommand) error {
-	if err := h.domainSvc.DeleteTodo(ctx, cmd.ID); err != nil {
-		return err
+func (h *DeleteTodoHandler) Handle(ctx context.Context, cmd any) (any, error) {
+	c := cmd.(DeleteTodoCommand)
+	if err := h.domainSvc.DeleteTodo(ctx, c.ID); err != nil {
+		return nil, err
 	}
 
 	_ = h.eventBus.Publish(ctx, events.Event{
 		Type: event.TodoDeletedEvent,
 		Payload: event.TodoDeleted{
-			ID:        cmd.ID,
+			ID:        c.ID,
 			DeletedAt: time.Now().UTC(),
 		},
 	})
 
-	return nil
+	return nil, nil
 }

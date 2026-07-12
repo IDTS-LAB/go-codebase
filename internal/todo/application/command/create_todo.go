@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/IDTS-LAB/go-codebase/internal/shared/events"
-	"github.com/IDTS-LAB/go-codebase/internal/todo/application/dto"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/application/mapper"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/event"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/service"
@@ -24,10 +23,11 @@ func NewCreateTodoHandler(domainSvc *service.TodoDomainService, eventBus events.
 	return &CreateTodoHandler{domainSvc: domainSvc, eventBus: eventBus}
 }
 
-func (h *CreateTodoHandler) Handle(ctx context.Context, cmd CreateTodoCommand) (dto.TodoResponse, error) {
-	todo, err := h.domainSvc.CreateTodo(ctx, cmd.Title, cmd.Description)
+func (h *CreateTodoHandler) Handle(ctx context.Context, cmd any) (any, error) {
+	c := cmd.(CreateTodoCommand)
+	todo, err := h.domainSvc.CreateTodo(ctx, c.Title, c.Description)
 	if err != nil {
-		return dto.TodoResponse{}, err
+		return nil, err
 	}
 
 	_ = h.eventBus.Publish(ctx, events.Event{
