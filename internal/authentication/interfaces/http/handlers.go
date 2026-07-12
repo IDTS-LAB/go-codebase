@@ -6,8 +6,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/IDTS-LAB/go-codebase/internal/authentication/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/application/dto"
-	"github.com/IDTS-LAB/go-codebase/internal/authentication/application/service"
+	"github.com/IDTS-LAB/go-codebase/internal/authentication/application/query"
+	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/entity"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
@@ -15,12 +18,13 @@ import (
 )
 
 type Handler struct {
-	svc       *service.AuthenticationService
-	validator *validator.Validator
+	commandBus cqrs.CommandBus
+	queryBus   cqrs.QueryBus
+	validator  *validator.Validator
 }
 
-func NewHandler(svc *service.AuthenticationService, v *validator.Validator) *Handler {
-	return &Handler{svc: svc, validator: v}
+func NewHandler(commandBus cqrs.CommandBus, queryBus cqrs.QueryBus, v *validator.Validator) *Handler {
+	return &Handler{commandBus: commandBus, queryBus: queryBus, validator: v}
 }
 
 // Register godoc
@@ -45,8 +49,12 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	_, err := h.svc.Register(r.Context(), req.Email, req.Password, req.Name)
-	if err != nil && errors.Is(err, service.ErrEmailAlreadyExists) {
+	_, err := h.commandBus.Dispatch(r.Context(), command.RegisterUserCommand{
+		Email:    req.Email,
+		Password: req.Password,
+		Name:     req.Name,
+	})
+	if err != nil && errors.Is(err, command.ErrEmailAlreadyExists) {
 		utils.RespondConflict(w, "email already registered")
 		return
 	}
@@ -74,29 +82,39 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	user, err := h.svc.Login(r.Context(), req.Email, req.Password)
+	userResp, err := h.queryBus.Ask(r.Context(), query.LoginQuery{
+		Email:    req.Email,
+		Password: req.Password,
+	})
 	if err != nil {
 		switch {
-		case errors.Is(err, service.ErrInvalidCredentials):
+		case errors.Is(err, query.ErrInvalidCredentials):
 			utils.RespondUnauthorized(w, "invalid email or password")
-		case errors.Is(err, service.ErrAccountDisabled):
+		case errors.Is(err, query.ErrAccountDisabled):
 			utils.RespondUnauthorized(w, "account is disabled")
-		case errors.Is(err, service.ErrAccountLocked):
+		case errors.Is(err, query.ErrAccountLocked):
 			utils.RespondForbidden(w, "ACCOUNT_LOCKED", "account is temporarily locked due to too many failed attempts")
-		case errors.Is(err, service.ErrEmailNotVerified):
+		case errors.Is(err, query.ErrEmailNotVerified):
 			utils.RespondForbidden(w, "EMAIL_NOT_VERIFIED", "email is not verified")
 		default:
 			utils.RespondInternalError(w, "failed to login")
 		}
 		return
 	}
-	tokens, err := h.svc.GenerateTokens(r.Context(), user)
+	tokenResp, err := h.commandBus.Dispatch(r.Context(), command.GenerateTokensCommand{
+		User: userResp.(*entity.User),
+	})
+	if err != nil {
+		utils.RespondInternalError(w, "failed to generate tokens")
+		return
+	}
+	tokens := tokenResp.(*command.TokenPair)
 	utils.Handle(w, dto.TokenResponse{
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 		ExpiresIn:    tokens.ExpiresIn,
 		TokenType:    "Bearer",
-	}, err)
+	}, nil)
 }
 
 // RefreshToken godoc
@@ -120,17 +138,24 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	tokens, err := h.svc.RefreshToken(r.Context(), req.RefreshToken)
-	if err != nil && errors.Is(err, service.ErrInvalidRefreshToken) {
+	resp, err := h.commandBus.Dispatch(r.Context(), command.RefreshTokenCommand{
+		RefreshToken: req.RefreshToken,
+	})
+	if err != nil && errors.Is(err, command.ErrInvalidRefreshToken) {
 		utils.RespondUnauthorized(w, "invalid or expired refresh token")
 		return
 	}
+	if err != nil {
+		utils.RespondInternalError(w, "failed to refresh token")
+		return
+	}
+	tokens := resp.(*command.TokenPair)
 	utils.Handle(w, dto.TokenResponse{
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 		ExpiresIn:    tokens.ExpiresIn,
 		TokenType:    "Bearer",
-	}, err)
+	}, nil)
 }
 
 // Logout godoc
@@ -153,7 +178,11 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	if jti := r.Context().Value("access_token_jti"); jti != nil {
 		accessTokenJTI, _ = jti.(string)
 	}
-	err := h.svc.Logout(r.Context(), req.RefreshToken, accessTokenJTI, 15*time.Minute)
+	_, err := h.commandBus.Dispatch(r.Context(), command.LogoutCommand{
+		RefreshToken:   req.RefreshToken,
+		AccessTokenJTI: accessTokenJTI,
+		AccessTokenTTL: 15 * time.Minute,
+	})
 	utils.Handle(w, dto.MessageResponse{Message: "logged out successfully"}, err)
 }
 
@@ -177,7 +206,7 @@ func (h *Handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid user ID")
 		return
 	}
-	err = h.svc.LogoutAll(r.Context(), uid)
+	_, err = h.commandBus.Dispatch(r.Context(), command.LogoutAllCommand{UserID: uid})
 	utils.Handle(w, dto.MessageResponse{Message: "all sessions terminated"}, err)
 }
 
@@ -218,8 +247,8 @@ func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "token is required")
 		return
 	}
-	err := h.svc.VerifyEmail(r.Context(), token)
-	if err != nil && (errors.Is(err, service.ErrInvalidVerifyToken) || errors.Is(err, service.ErrVerifyTokenExpired)) {
+	_, err := h.commandBus.Dispatch(r.Context(), command.VerifyEmailCommand{Token: token})
+	if err != nil && (errors.Is(err, command.ErrInvalidVerifyToken) || errors.Is(err, command.ErrVerifyTokenExpired)) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
@@ -245,7 +274,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	_ = h.svc.ForgotPassword(r.Context(), req.Email)
+	_, _ = h.commandBus.Dispatch(r.Context(), command.ForgotPasswordCommand{Email: req.Email})
 	utils.RespondSuccess(w, map[string]string{"message": "if the email exists, a reset link has been sent"})
 }
 
@@ -269,8 +298,11 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	err := h.svc.ResetPassword(r.Context(), req.Token, req.NewPassword)
-	if err != nil && (errors.Is(err, service.ErrInvalidResetToken) || errors.Is(err, service.ErrResetTokenExpired)) {
+	_, err := h.commandBus.Dispatch(r.Context(), command.ResetPasswordCommand{
+		Token:       req.Token,
+		NewPassword: req.NewPassword,
+	})
+	if err != nil && (errors.Is(err, command.ErrInvalidResetToken) || errors.Is(err, command.ErrResetTokenExpired)) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
@@ -296,6 +328,6 @@ func (h *Handler) ResendVerification(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	_ = h.svc.ResendVerification(r.Context(), req.Email)
+	_, _ = h.commandBus.Dispatch(r.Context(), command.ResendVerificationCommand{Email: req.Email})
 	utils.RespondSuccess(w, map[string]string{"message": "if the email exists, a verification link has been sent"})
 }
