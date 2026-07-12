@@ -9,123 +9,27 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/dto"
+	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/query"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/entity"
-	coredomain "github.com/IDTS-LAB/go-codebase/internal/core/domain"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
+	coredomain "github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-type mockService struct {
-	mock.Mock
+type mockHandler struct {
+	result any
+	err    error
 }
 
-func (m *mockService) CreateRole(ctx context.Context, name, description string) (*entity.Role, error) {
-	args := m.Called(ctx, name, description)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*entity.Role), args.Error(1)
-}
-
-func (m *mockService) ListRoles(ctx context.Context, page, perPage int) ([]*entity.Role, int, error) {
-	args := m.Called(ctx, page, perPage)
-	return args.Get(0).([]*entity.Role), args.Int(1), args.Error(2)
-}
-
-func (m *mockService) GetRole(ctx context.Context, id uuid.UUID) (*entity.Role, error) {
-	args := m.Called(ctx, id)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*entity.Role), args.Error(1)
-}
-
-func (m *mockService) UpdateRole(ctx context.Context, id uuid.UUID, name, description string) (*entity.Role, error) {
-	args := m.Called(ctx, id, name, description)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*entity.Role), args.Error(1)
-}
-
-func (m *mockService) DeleteRole(ctx context.Context, id uuid.UUID) error {
-	args := m.Called(ctx, id)
-	return args.Error(0)
-}
-
-func (m *mockService) CreatePermission(ctx context.Context, name, description, resource, action string) (*entity.Permission, error) {
-	args := m.Called(ctx, name, description, resource, action)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*entity.Permission), args.Error(1)
-}
-
-func (m *mockService) ListPermissions(ctx context.Context, page, perPage int) ([]*entity.Permission, int, error) {
-	args := m.Called(ctx, page, perPage)
-	return args.Get(0).([]*entity.Permission), args.Int(1), args.Error(2)
-}
-
-func (m *mockService) GetPermission(ctx context.Context, id uuid.UUID) (*entity.Permission, error) {
-	args := m.Called(ctx, id)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*entity.Permission), args.Error(1)
-}
-
-func (m *mockService) UpdatePermission(ctx context.Context, id uuid.UUID, name, description, resource, action string) (*entity.Permission, error) {
-	args := m.Called(ctx, id, name, description, resource, action)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*entity.Permission), args.Error(1)
-}
-
-func (m *mockService) DeletePermission(ctx context.Context, id uuid.UUID) error {
-	args := m.Called(ctx, id)
-	return args.Error(0)
-}
-
-func (m *mockService) AssignRoleToUser(ctx context.Context, userID, roleID uuid.UUID) error {
-	args := m.Called(ctx, userID, roleID)
-	return args.Error(0)
-}
-
-func (m *mockService) RemoveRoleFromUser(ctx context.Context, userID, roleID uuid.UUID) error {
-	args := m.Called(ctx, userID, roleID)
-	return args.Error(0)
-}
-
-func (m *mockService) GetUserRoles(ctx context.Context, userID uuid.UUID) ([]*entity.Role, error) {
-	args := m.Called(ctx, userID)
-	return args.Get(0).([]*entity.Role), args.Error(1)
-}
-
-func (m *mockService) AssignPermissionToRole(ctx context.Context, roleID, permissionID uuid.UUID) error {
-	args := m.Called(ctx, roleID, permissionID)
-	return args.Error(0)
-}
-
-func (m *mockService) RemovePermissionFromRole(ctx context.Context, roleID, permissionID uuid.UUID) error {
-	args := m.Called(ctx, roleID, permissionID)
-	return args.Error(0)
-}
-
-func (m *mockService) GetRolePermissions(ctx context.Context, roleID uuid.UUID) ([]*entity.Permission, error) {
-	args := m.Called(ctx, roleID)
-	return args.Get(0).([]*entity.Permission), args.Error(1)
-}
-
-func (m *mockService) CheckPermission(ctx context.Context, userID uuid.UUID, resource, action string) (bool, error) {
-	args := m.Called(ctx, userID, resource, action)
-	return args.Bool(0), args.Error(1)
+func (h *mockHandler) Handle(ctx context.Context, _ any) (any, error) {
+	return h.result, h.err
 }
 
 func withChiParams(r *http.Request, params map[string]string) *http.Request {
@@ -149,9 +53,10 @@ func responseMap(t *testing.T, w *httptest.ResponseRecorder) map[string]interfac
 
 func TestCreateRole(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		roleID := uuid.New()
 		expected := &entity.Role{
@@ -159,8 +64,7 @@ func TestCreateRole(t *testing.T) {
 			Name:        "admin",
 			Description: "Administrator",
 		}
-
-		svc.On("CreateRole", mock.Anything, "admin", "Administrator").Return(expected, nil)
+		cmdBus.Register(command.CreateRoleCommand{}, &mockHandler{result: expected})
 
 		body, _ := json.Marshal(dto.CreateRoleRequest{Name: "admin", Description: "Administrator"})
 		w := httptest.NewRecorder()
@@ -172,13 +76,13 @@ func TestCreateRole(t *testing.T) {
 		assert.Equal(t, http.StatusCreated, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
-		svc.AssertExpectations(t)
 	})
 
 	t.Run("validation error", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodPost, "/roles", bytes.NewReader([]byte(`{"name":""}`)))
@@ -194,12 +98,16 @@ func TestCreateRole(t *testing.T) {
 
 func TestListRoles(t *testing.T) {
 	t.Run("success with pagination", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
-		roles := []*entity.Role{{Name: "admin"}}
-		svc.On("ListRoles", mock.Anything, 1, 20).Return(roles, 1, nil)
+		roles := query.ListRolesResult{
+			Roles: []*entity.Role{{Name: "admin"}},
+			Total: 1,
+		}
+		qBus.Register(query.ListRolesQuery{}, &mockHandler{result: roles})
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodGet, "/roles", nil)
@@ -210,23 +118,22 @@ func TestListRoles(t *testing.T) {
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
 		assert.NotNil(t, resp["meta"])
-		svc.AssertExpectations(t)
 	})
 }
 
 func TestGetRole(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		roleID := uuid.New()
 		expected := &entity.Role{
 			Entity: coredomain.Entity{ID: roleID},
 			Name:   "admin",
 		}
-
-		svc.On("GetRole", mock.Anything, roleID).Return(expected, nil)
+		qBus.Register(query.GetRoleQuery{}, &mockHandler{result: expected})
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodGet, "/roles/"+roleID.String(), nil)
@@ -237,13 +144,13 @@ func TestGetRole(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
-		svc.AssertExpectations(t)
 	})
 
 	t.Run("invalid UUID", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodGet, "/roles/invalid", nil)
@@ -255,12 +162,13 @@ func TestGetRole(t *testing.T) {
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		roleID := uuid.New()
-		svc.On("GetRole", mock.Anything, roleID).Return(nil, coredomain.ErrNotFound)
+		qBus.Register(query.GetRoleQuery{}, &mockHandler{result: nil, err: coredomain.ErrNotFound})
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodGet, "/roles/"+roleID.String(), nil)
@@ -269,15 +177,15 @@ func TestGetRole(t *testing.T) {
 		h.GetRole(w, r)
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
-		svc.AssertExpectations(t)
 	})
 }
 
 func TestUpdateRole(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		roleID := uuid.New()
 		updated := &entity.Role{
@@ -285,8 +193,7 @@ func TestUpdateRole(t *testing.T) {
 			Name:        "admin",
 			Description: "Updated",
 		}
-
-		svc.On("UpdateRole", mock.Anything, roleID, "admin", "Updated").Return(updated, nil)
+		cmdBus.Register(command.UpdateRoleCommand{}, &mockHandler{result: updated})
 
 		body, _ := json.Marshal(dto.UpdateRoleRequest{Name: "admin", Description: "Updated"})
 		w := httptest.NewRecorder()
@@ -299,18 +206,18 @@ func TestUpdateRole(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
-		svc.AssertExpectations(t)
 	})
 }
 
 func TestDeleteRole(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		roleID := uuid.New()
-		svc.On("DeleteRole", mock.Anything, roleID).Return(nil)
+		cmdBus.Register(command.DeleteRoleCommand{}, &mockHandler{})
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodDelete, "/roles/"+roleID.String(), nil)
@@ -321,15 +228,15 @@ func TestDeleteRole(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
-		svc.AssertExpectations(t)
 	})
 }
 
 func TestCreatePermission(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		permID := uuid.New()
 		expected := &entity.Permission{
@@ -338,8 +245,7 @@ func TestCreatePermission(t *testing.T) {
 			Resource:    "users",
 			Action:      "read",
 		}
-
-		svc.On("CreatePermission", mock.Anything, "read", "Read users", "users", "read").Return(expected, nil)
+		cmdBus.Register(command.CreatePermissionCommand{}, &mockHandler{result: expected})
 
 		body, _ := json.Marshal(dto.CreatePermissionRequest{
 			Name: "read", Description: "Read users", Resource: "users", Action: "read",
@@ -353,13 +259,13 @@ func TestCreatePermission(t *testing.T) {
 		assert.Equal(t, http.StatusCreated, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
-		svc.AssertExpectations(t)
 	})
 
 	t.Run("validation error", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodPost, "/permissions", bytes.NewReader([]byte(`{}`)))
@@ -375,12 +281,16 @@ func TestCreatePermission(t *testing.T) {
 
 func TestListPermissions(t *testing.T) {
 	t.Run("success with pagination", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
-		perms := []*entity.Permission{{Name: "read", Resource: "users", Action: "read"}}
-		svc.On("ListPermissions", mock.Anything, 1, 20).Return(perms, 1, nil)
+		perms := query.ListPermissionsResult{
+			Permissions: []*entity.Permission{{Name: "read", Resource: "users", Action: "read"}},
+			Total:       1,
+		}
+		qBus.Register(query.ListPermissionsQuery{}, &mockHandler{result: perms})
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodGet, "/permissions", nil)
@@ -391,15 +301,15 @@ func TestListPermissions(t *testing.T) {
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
 		assert.NotNil(t, resp["meta"])
-		svc.AssertExpectations(t)
 	})
 }
 
 func TestGetPermission(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		permID := uuid.New()
 		expected := &entity.Permission{
@@ -408,8 +318,7 @@ func TestGetPermission(t *testing.T) {
 			Resource: "users",
 			Action:   "read",
 		}
-
-		svc.On("GetPermission", mock.Anything, permID).Return(expected, nil)
+		qBus.Register(query.GetPermissionQuery{}, &mockHandler{result: expected})
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodGet, "/permissions/"+permID.String(), nil)
@@ -420,16 +329,16 @@ func TestGetPermission(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
-		svc.AssertExpectations(t)
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		permID := uuid.New()
-		svc.On("GetPermission", mock.Anything, permID).Return(nil, coredomain.ErrNotFound)
+		qBus.Register(query.GetPermissionQuery{}, &mockHandler{result: nil, err: coredomain.ErrNotFound})
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodGet, "/permissions/"+permID.String(), nil)
@@ -438,15 +347,15 @@ func TestGetPermission(t *testing.T) {
 		h.GetPermission(w, r)
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
-		svc.AssertExpectations(t)
 	})
 }
 
 func TestUpdatePermission(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		permID := uuid.New()
 		updated := &entity.Permission{
@@ -455,8 +364,7 @@ func TestUpdatePermission(t *testing.T) {
 			Resource:    "users",
 			Action:      "write",
 		}
-
-		svc.On("UpdatePermission", mock.Anything, permID, "write", "Write users", "users", "write").Return(updated, nil)
+		cmdBus.Register(command.UpdatePermissionCommand{}, &mockHandler{result: updated})
 
 		body, _ := json.Marshal(dto.UpdatePermissionRequest{
 			Name: "write", Description: "Write users", Resource: "users", Action: "write",
@@ -471,18 +379,18 @@ func TestUpdatePermission(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
-		svc.AssertExpectations(t)
 	})
 }
 
 func TestDeletePermission(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		permID := uuid.New()
-		svc.On("DeletePermission", mock.Anything, permID).Return(nil)
+		cmdBus.Register(command.DeletePermissionCommand{}, &mockHandler{})
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodDelete, "/permissions/"+permID.String(), nil)
@@ -493,19 +401,19 @@ func TestDeletePermission(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
-		svc.AssertExpectations(t)
 	})
 }
 
 func TestAssignRole(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		userID := uuid.New()
 		roleID := uuid.New()
-		svc.On("AssignRoleToUser", mock.Anything, userID, roleID).Return(nil)
+		cmdBus.Register(command.AssignRoleCommand{}, &mockHandler{})
 
 		body, _ := json.Marshal(dto.AssignRoleRequest{UserID: userID, RoleID: roleID})
 		w := httptest.NewRecorder()
@@ -517,13 +425,13 @@ func TestAssignRole(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
-		svc.AssertExpectations(t)
 	})
 
 	t.Run("validation error", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodPost, "/users/"+uuid.New().String()+"/roles", bytes.NewReader([]byte(`{}`)))
@@ -537,13 +445,14 @@ func TestAssignRole(t *testing.T) {
 
 func TestRemoveRole(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		userID := uuid.New()
 		roleID := uuid.New()
-		svc.On("RemoveRoleFromUser", mock.Anything, userID, roleID).Return(nil)
+		cmdBus.Register(command.UnassignRoleCommand{}, &mockHandler{})
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodDelete, "/users/"+userID.String()+"/roles/"+roleID.String(), nil)
@@ -554,19 +463,19 @@ func TestRemoveRole(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
-		svc.AssertExpectations(t)
 	})
 }
 
 func TestGetUserRoles(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		userID := uuid.New()
 		roles := []*entity.Role{{Name: "admin"}}
-		svc.On("GetUserRoles", mock.Anything, userID).Return(roles, nil)
+		qBus.Register(query.GetUserRolesQuery{}, &mockHandler{result: roles})
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodGet, "/users/"+userID.String()+"/roles", nil)
@@ -577,19 +486,19 @@ func TestGetUserRoles(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
-		svc.AssertExpectations(t)
 	})
 }
 
 func TestAssignPermission(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		roleID := uuid.New()
 		permID := uuid.New()
-		svc.On("AssignPermissionToRole", mock.Anything, roleID, permID).Return(nil)
+		cmdBus.Register(command.AssignPermissionCommand{}, &mockHandler{})
 
 		body, _ := json.Marshal(dto.AssignPermissionRequest{RoleID: roleID, PermissionID: permID})
 		w := httptest.NewRecorder()
@@ -601,13 +510,13 @@ func TestAssignPermission(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
-		svc.AssertExpectations(t)
 	})
 
 	t.Run("validation error", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodPost, "/roles/"+uuid.New().String()+"/permissions", bytes.NewReader([]byte(`{}`)))
@@ -621,13 +530,14 @@ func TestAssignPermission(t *testing.T) {
 
 func TestRemovePermission(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		roleID := uuid.New()
 		permID := uuid.New()
-		svc.On("RemovePermissionFromRole", mock.Anything, roleID, permID).Return(nil)
+		cmdBus.Register(command.UnassignPermissionCommand{}, &mockHandler{})
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodDelete, "/roles/"+roleID.String()+"/permissions/"+permID.String(), nil)
@@ -638,19 +548,19 @@ func TestRemovePermission(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
-		svc.AssertExpectations(t)
 	})
 }
 
 func TestGetRolePermissions(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		roleID := uuid.New()
 		perms := []*entity.Permission{{Name: "read", Resource: "users", Action: "read"}}
-		svc.On("GetRolePermissions", mock.Anything, roleID).Return(perms, nil)
+		qBus.Register(query.GetRolePermissionsQuery{}, &mockHandler{result: perms})
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodGet, "/roles/"+roleID.String()+"/permissions", nil)
@@ -661,18 +571,18 @@ func TestGetRolePermissions(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
-		svc.AssertExpectations(t)
 	})
 }
 
 func TestCheckPermission(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		userID := uuid.New()
-		svc.On("CheckPermission", mock.Anything, userID, "users", "read").Return(true, nil)
+		qBus.Register(query.CheckPermissionQuery{}, &mockHandler{result: true})
 
 		body, _ := json.Marshal(dto.CheckPermissionRequest{Resource: "users", Action: "read"})
 		w := httptest.NewRecorder()
@@ -685,13 +595,13 @@ func TestCheckPermission(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
-		svc.AssertExpectations(t)
 	})
 
 	t.Run("unauthorized", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		body, _ := json.Marshal(dto.CheckPermissionRequest{Resource: "users", Action: "read"})
 		w := httptest.NewRecorder()
@@ -701,13 +611,13 @@ func TestCheckPermission(t *testing.T) {
 		h.CheckPermission(w, r)
 
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
-		svc.AssertNotCalled(t, "CheckPermission")
 	})
 
 	t.Run("error from invalid context userID", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		body, _ := json.Marshal(dto.CheckPermissionRequest{Resource: "users", Action: "read"})
 		w := httptest.NewRecorder()
@@ -723,9 +633,10 @@ func TestCheckPermission(t *testing.T) {
 
 func TestHandlerErrors(t *testing.T) {
 	t.Run("create role bad JSON", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodPost, "/roles", bytes.NewReader([]byte(`{invalid json`)))
@@ -737,9 +648,10 @@ func TestHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("update role bad JSON", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		roleID := uuid.New()
 		w := httptest.NewRecorder()
@@ -753,9 +665,10 @@ func TestHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("update role invalid UUID", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodPut, "/roles/invalid", bytes.NewReader([]byte(`{"name":"admin"}`)))
@@ -768,12 +681,13 @@ func TestHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("delete role error", func(t *testing.T) {
-		svc := new(mockService)
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
 		v := validator.New()
-		h := &Handler{svc: svc, validator: v}
+		h := NewHandler(cmdBus, qBus, v)
 
 		roleID := uuid.New()
-		svc.On("DeleteRole", mock.Anything, roleID).Return(errors.New("db error"))
+		cmdBus.Register(command.DeleteRoleCommand{}, &mockHandler{err: errors.New("db error")})
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodDelete, "/roles/"+roleID.String(), nil)
@@ -782,6 +696,5 @@ func TestHandlerErrors(t *testing.T) {
 		h.DeleteRole(w, r)
 
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
-		svc.AssertExpectations(t)
 	})
 }

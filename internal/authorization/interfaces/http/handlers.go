@@ -1,14 +1,14 @@
 package http
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 
+	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/dto"
-	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/service"
-	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/entity"
+	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/query"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
@@ -16,33 +16,14 @@ import (
 	"github.com/google/uuid"
 )
 
-type AuthorizationService interface {
-	CreateRole(ctx context.Context, name, description string) (*entity.Role, error)
-	ListRoles(ctx context.Context, page, perPage int) ([]*entity.Role, int, error)
-	GetRole(ctx context.Context, id uuid.UUID) (*entity.Role, error)
-	UpdateRole(ctx context.Context, id uuid.UUID, name, description string) (*entity.Role, error)
-	DeleteRole(ctx context.Context, id uuid.UUID) error
-	CreatePermission(ctx context.Context, name, description, resource, action string) (*entity.Permission, error)
-	ListPermissions(ctx context.Context, page, perPage int) ([]*entity.Permission, int, error)
-	GetPermission(ctx context.Context, id uuid.UUID) (*entity.Permission, error)
-	UpdatePermission(ctx context.Context, id uuid.UUID, name, description, resource, action string) (*entity.Permission, error)
-	DeletePermission(ctx context.Context, id uuid.UUID) error
-	AssignRoleToUser(ctx context.Context, userID, roleID uuid.UUID) error
-	RemoveRoleFromUser(ctx context.Context, userID, roleID uuid.UUID) error
-	GetUserRoles(ctx context.Context, userID uuid.UUID) ([]*entity.Role, error)
-	AssignPermissionToRole(ctx context.Context, roleID, permissionID uuid.UUID) error
-	RemovePermissionFromRole(ctx context.Context, roleID, permissionID uuid.UUID) error
-	GetRolePermissions(ctx context.Context, roleID uuid.UUID) ([]*entity.Permission, error)
-	CheckPermission(ctx context.Context, userID uuid.UUID, resource, action string) (bool, error)
-}
-
 type Handler struct {
-	svc       AuthorizationService
-	validator *validator.Validator
+	commandBus cqrs.CommandBus
+	queryBus   cqrs.QueryBus
+	validator  *validator.Validator
 }
 
-func NewHandler(svc *service.AuthorizationService, v *validator.Validator) *Handler {
-	return &Handler{svc: svc, validator: v}
+func NewHandler(commandBus cqrs.CommandBus, queryBus cqrs.QueryBus, v *validator.Validator) *Handler {
+	return &Handler{commandBus: commandBus, queryBus: queryBus, validator: v}
 }
 
 // CreateRole godoc
@@ -67,8 +48,11 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	role, err := h.svc.CreateRole(r.Context(), req.Name, req.Description)
-	utils.HandleCreated(w, role, err)
+	resp, err := h.commandBus.Dispatch(r.Context(), command.CreateRoleCommand{
+		Name:        req.Name,
+		Description: req.Description,
+	})
+	utils.HandleCreated(w, resp, err)
 }
 
 // ListRoles godoc
@@ -90,8 +74,13 @@ func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
 	if pp := r.URL.Query().Get("per_page"); pp != "" {
 		fmt.Sscanf(pp, "%d", &perPage)
 	}
-	roles, total, err := h.svc.ListRoles(r.Context(), page, perPage)
-	utils.HandlePaginated(w, roles, page, perPage, total, err)
+	resp, err := h.queryBus.Ask(r.Context(), query.ListRolesQuery{Page: page, PerPage: perPage})
+	if err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+	result := resp.(query.ListRolesResult)
+	utils.HandlePaginated(w, result.Roles, page, perPage, result.Total, nil)
 }
 
 // GetRole godoc
@@ -110,8 +99,8 @@ func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid role ID")
 		return
 	}
-	role, err := h.svc.GetRole(r.Context(), id)
-	utils.Handle(w, role, err)
+	resp, err := h.queryBus.Ask(r.Context(), query.GetRoleQuery{ID: id})
+	utils.Handle(w, resp, err)
 }
 
 // UpdateRole godoc
@@ -138,8 +127,12 @@ func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid request body")
 		return
 	}
-	role, err := h.svc.UpdateRole(r.Context(), id, req.Name, req.Description)
-	utils.Handle(w, role, err)
+	resp, err := h.commandBus.Dispatch(r.Context(), command.UpdateRoleCommand{
+		ID:          id,
+		Name:        req.Name,
+		Description: req.Description,
+	})
+	utils.Handle(w, resp, err)
 }
 
 // DeleteRole godoc
@@ -157,7 +150,7 @@ func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid role ID")
 		return
 	}
-	err = h.svc.DeleteRole(r.Context(), id)
+	_, err = h.commandBus.Dispatch(r.Context(), command.DeleteRoleCommand{ID: id})
 	utils.HandleNoContent(w, err)
 }
 
@@ -183,8 +176,13 @@ func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	perm, err := h.svc.CreatePermission(r.Context(), req.Name, req.Description, req.Resource, req.Action)
-	utils.HandleCreated(w, perm, err)
+	resp, err := h.commandBus.Dispatch(r.Context(), command.CreatePermissionCommand{
+		Name:        req.Name,
+		Description: req.Description,
+		Resource:    req.Resource,
+		Action:      req.Action,
+	})
+	utils.HandleCreated(w, resp, err)
 }
 
 // ListPermissions godoc
@@ -206,8 +204,13 @@ func (h *Handler) ListPermissions(w http.ResponseWriter, r *http.Request) {
 	if pp := r.URL.Query().Get("per_page"); pp != "" {
 		fmt.Sscanf(pp, "%d", &perPage)
 	}
-	perms, total, err := h.svc.ListPermissions(r.Context(), page, perPage)
-	utils.HandlePaginated(w, perms, page, perPage, total, err)
+	resp, err := h.queryBus.Ask(r.Context(), query.ListPermissionsQuery{Page: page, PerPage: perPage})
+	if err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+	result := resp.(query.ListPermissionsResult)
+	utils.HandlePaginated(w, result.Permissions, page, perPage, result.Total, nil)
 }
 
 // GetPermission godoc
@@ -226,8 +229,8 @@ func (h *Handler) GetPermission(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid permission ID")
 		return
 	}
-	perm, err := h.svc.GetPermission(r.Context(), id)
-	utils.Handle(w, perm, err)
+	resp, err := h.queryBus.Ask(r.Context(), query.GetPermissionQuery{ID: id})
+	utils.Handle(w, resp, err)
 }
 
 // UpdatePermission godoc
@@ -254,8 +257,14 @@ func (h *Handler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid request body")
 		return
 	}
-	perm, err := h.svc.UpdatePermission(r.Context(), id, req.Name, req.Description, req.Resource, req.Action)
-	utils.Handle(w, perm, err)
+	resp, err := h.commandBus.Dispatch(r.Context(), command.UpdatePermissionCommand{
+		ID:          id,
+		Name:        req.Name,
+		Description: req.Description,
+		Resource:    req.Resource,
+		Action:      req.Action,
+	})
+	utils.Handle(w, resp, err)
 }
 
 // DeletePermission godoc
@@ -273,7 +282,7 @@ func (h *Handler) DeletePermission(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid permission ID")
 		return
 	}
-	err = h.svc.DeletePermission(r.Context(), id)
+	_, err = h.commandBus.Dispatch(r.Context(), command.DeletePermissionCommand{ID: id})
 	utils.HandleNoContent(w, err)
 }
 
@@ -299,7 +308,10 @@ func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	err := h.svc.AssignRoleToUser(r.Context(), req.UserID, req.RoleID)
+	_, err := h.commandBus.Dispatch(r.Context(), command.AssignRoleCommand{
+		UserID: req.UserID,
+		RoleID: req.RoleID,
+	})
 	utils.HandleNoContent(w, err)
 }
 
@@ -324,7 +336,10 @@ func (h *Handler) RemoveRole(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid role ID")
 		return
 	}
-	err = h.svc.RemoveRoleFromUser(r.Context(), userID, roleID)
+	_, err = h.commandBus.Dispatch(r.Context(), command.UnassignRoleCommand{
+		UserID: userID,
+		RoleID: roleID,
+	})
 	utils.HandleNoContent(w, err)
 }
 
@@ -344,8 +359,8 @@ func (h *Handler) GetUserRoles(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid user ID")
 		return
 	}
-	roles, err := h.svc.GetUserRoles(r.Context(), userID)
-	utils.Handle(w, roles, err)
+	resp, err := h.queryBus.Ask(r.Context(), query.GetUserRolesQuery{UserID: userID})
+	utils.Handle(w, resp, err)
 }
 
 // AssignPermission godoc
@@ -370,7 +385,10 @@ func (h *Handler) AssignPermission(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	err := h.svc.AssignPermissionToRole(r.Context(), req.RoleID, req.PermissionID)
+	_, err := h.commandBus.Dispatch(r.Context(), command.AssignPermissionCommand{
+		RoleID:       req.RoleID,
+		PermissionID: req.PermissionID,
+	})
 	utils.HandleNoContent(w, err)
 }
 
@@ -395,7 +413,10 @@ func (h *Handler) RemovePermission(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid permission ID")
 		return
 	}
-	err = h.svc.RemovePermissionFromRole(r.Context(), roleID, permID)
+	_, err = h.commandBus.Dispatch(r.Context(), command.UnassignPermissionCommand{
+		RoleID:       roleID,
+		PermissionID: permID,
+	})
 	utils.HandleNoContent(w, err)
 }
 
@@ -415,8 +436,8 @@ func (h *Handler) GetRolePermissions(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid role ID")
 		return
 	}
-	perms, err := h.svc.GetRolePermissions(r.Context(), roleID)
-	utils.Handle(w, perms, err)
+	resp, err := h.queryBus.Ask(r.Context(), query.GetRolePermissionsQuery{RoleID: roleID})
+	utils.Handle(w, resp, err)
 }
 
 // CheckPermission godoc
@@ -451,6 +472,11 @@ func (h *Handler) CheckPermission(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	allowed, err := h.svc.CheckPermission(r.Context(), uid, req.Resource, req.Action)
+	resp, err := h.queryBus.Ask(r.Context(), query.CheckPermissionQuery{
+		UserID:   uid,
+		Resource: req.Resource,
+		Action:   req.Action,
+	})
+	allowed, _ := resp.(bool)
 	utils.Handle(w, dto.CheckPermissionResponse{Allowed: allowed}, err)
 }
