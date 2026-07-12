@@ -1,11 +1,13 @@
 package authorization
 
 import (
+	"github.com/IDTS-LAB/go-codebase/internal/authorization/application"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/query"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/repository"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/infrastructure/casbin"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/infrastructure/persistence"
+	"github.com/IDTS-LAB/go-codebase/internal/authorization/public"
 	httpHandler "github.com/IDTS-LAB/go-codebase/internal/authorization/interfaces/http"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"go.uber.org/fx"
@@ -21,6 +23,7 @@ var Module = fx.Module("authorization",
 		persistence.NewRolePermissionRepository,
 		casbin.NewPolicyLoader,
 		httpHandler.NewHandler,
+		fx.Annotate(application.NewAuthorizationProvider, fx.As(new(public.AuthorizationProvider))),
 	),
 
 	fx.Invoke(registerHandlers),

@@ -11,13 +11,15 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/IDTS-LAB/go-codebase/internal/user/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/user/application/query"
+	"github.com/IDTS-LAB/go-codebase/internal/user/public"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 type Handler struct {
-	commandBus cqrs.CommandBus
-	queryBus   cqrs.QueryBus
+	commandBus  cqrs.CommandBus
+	queryBus    cqrs.QueryBus
+	profileProv public.UserProfileProvider
 }
 
 func NewHandler(commandBus cqrs.CommandBus, queryBus cqrs.QueryBus) *Handler {
@@ -25,12 +27,13 @@ func NewHandler(commandBus cqrs.CommandBus, queryBus cqrs.QueryBus) *Handler {
 }
 
 type UserResponse struct {
-	ID        string `json:"id"`
-	Email     string `json:"email"`
-	Name      string `json:"name"`
-	IsActive  bool   `json:"is_active"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	ID        string   `json:"id"`
+	Email     string   `json:"email"`
+	Name      string   `json:"name"`
+	Roles     []string `json:"roles"`
+	IsActive  bool     `json:"is_active"`
+	CreatedAt string   `json:"created_at"`
+	UpdatedAt string   `json:"updated_at"`
 }
 
 type UpdateUserRequest struct {
@@ -144,13 +147,13 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.queryBus.Ask(r.Context(), query.GetUserQuery{ID: id})
+	resp, err := h.profileProv.GetProfile(r.Context(), id)
 	if err != nil {
 		utils.Handle(w, nil, err)
 		return
 	}
 
-	utils.RespondSuccess(w, userToResponse(resp.(*authEntity.User)))
+	utils.RespondSuccess(w, resp)
 }
 
 // Update godoc

@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 
+	roleProvider "github.com/IDTS-LAB/go-codebase/internal/authorization/public"
 	"github.com/IDTS-LAB/go-codebase/internal/user/domain/repository"
 	"github.com/google/uuid"
 )
@@ -12,11 +13,12 @@ type GetUserQuery struct {
 }
 
 type GetUserHandler struct {
-	repo repository.UserRepository
+	repo         repository.UserRepository
+	roleProvider roleProvider.AuthorizationProvider
 }
 
-func NewGetUserHandler(repo repository.UserRepository) *GetUserHandler {
-	return &GetUserHandler{repo: repo}
+func NewGetUserHandler(repo repository.UserRepository, roleProvider roleProvider.AuthorizationProvider) *GetUserHandler {
+	return &GetUserHandler{repo: repo, roleProvider: roleProvider}
 }
 
 func (h *GetUserHandler) Handle(ctx context.Context, query any) (any, error) {

@@ -5,14 +5,14 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(36) NOT NULL DEFAUL
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
 
 -- user_credentials
-CREATE TABLE user_credentials (
+CREATE TABLE IF NOT EXISTS  user_credentials (
     user_id       UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     password_hash VARCHAR(255) NOT NULL DEFAULT '',
     last_login_at TIMESTAMPTZ
 );
 
 -- user_security
-CREATE TABLE user_security (
+CREATE TABLE IF NOT EXISTS  user_security (
     user_id       UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     login_attempts INTEGER NOT NULL DEFAULT 0,
     locked_until   TIMESTAMPTZ,
@@ -21,7 +21,7 @@ CREATE TABLE user_security (
 );
 
 -- user_tokens
-CREATE TABLE user_tokens (
+CREATE TABLE IF NOT EXISTS  user_tokens (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token_type   VARCHAR(50) NOT NULL,
@@ -31,11 +31,11 @@ CREATE TABLE user_tokens (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_user_tokens_user_id ON user_tokens(user_id);
-CREATE INDEX idx_user_tokens_token_hash ON user_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_user_tokens_user_id ON user_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_tokens_token_hash ON user_tokens(token_hash);
 
 -- user_profiles
-CREATE TABLE user_profiles (
+CREATE TABLE IF NOT EXISTS  user_profiles (
     user_id    UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     first_name VARCHAR(255) NOT NULL DEFAULT '',
     last_name  VARCHAR(255) NOT NULL DEFAULT '',
@@ -47,7 +47,7 @@ CREATE TABLE user_profiles (
 );
 
 -- user_addresses
-CREATE TABLE user_addresses (
+CREATE TABLE IF NOT EXISTS  user_addresses (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     label       VARCHAR(100) NOT NULL DEFAULT '',
@@ -59,10 +59,10 @@ CREATE TABLE user_addresses (
     country     VARCHAR(100) NOT NULL DEFAULT ''
 );
 
-CREATE INDEX idx_user_addresses_user_id ON user_addresses(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_addresses_user_id ON user_addresses(user_id);
 
 -- user_sessions
-CREATE TABLE user_sessions (
+CREATE TABLE IF NOT EXISTS  user_sessions (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     refresh_token_hash VARCHAR(255),
@@ -75,10 +75,10 @@ CREATE TABLE user_sessions (
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_user_sessions_user_id ON user_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
 
 -- user_social_links
-CREATE TABLE user_social_links (
+CREATE TABLE IF NOT EXISTS  user_social_links (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     provider       VARCHAR(50) NOT NULL,
@@ -89,27 +89,14 @@ CREATE TABLE user_social_links (
     UNIQUE(provider, provider_id)
 );
 
-CREATE INDEX idx_user_social_links_user_id ON user_social_links(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_social_links_user_id ON user_social_links(user_id);
 
 -- user_preferences
-CREATE TABLE user_preferences (
+CREATE TABLE IF NOT EXISTS  user_preferences (
     user_id     UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     preferences JSONB NOT NULL DEFAULT '{}',
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
--- Migrate data from old users table
-INSERT INTO user_credentials (user_id, password_hash, last_login_at)
-SELECT id, password_hash, last_login_at FROM users WHERE password_hash IS NOT NULL;
-
-INSERT INTO user_security (user_id, login_attempts, locked_until)
-SELECT id, login_attempts, locked_until FROM users;
-
-INSERT INTO user_tokens (id, user_id, token_type, token_hash, expires_at, consumed_at, created_at)
-SELECT gen_random_uuid(), id, 'email_verification', verification_token, verification_token_expires_at, CASE WHEN email_verified_at IS NOT NULL THEN email_verified_at ELSE NULL END, created_at FROM users WHERE verification_token IS NOT NULL;
-
-INSERT INTO user_tokens (id, user_id, token_type, token_hash, expires_at, created_at)
-SELECT gen_random_uuid(), id, 'password_reset', reset_token, reset_token_expires_at, created_at FROM users WHERE reset_token IS NOT NULL;
 
 -- Drop old columns from users
 ALTER TABLE users DROP COLUMN IF EXISTS password_hash;

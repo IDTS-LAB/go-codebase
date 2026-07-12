@@ -7,8 +7,8 @@ ALTER TABLE users ADD COLUMN password_reset_expires TIMESTAMPTZ;
 
 UPDATE users SET email_verified = true WHERE deleted_at IS NULL;
 
-CREATE INDEX idx_users_email_verify_token ON users(email_verify_token) WHERE email_verify_token IS NOT NULL;
-CREATE INDEX idx_users_password_reset_token ON users(password_reset_token) WHERE password_reset_token IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_email_verify_token ON users(email_verify_token) WHERE email_verify_token IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_password_reset_token ON users(password_reset_token) WHERE password_reset_token IS NOT NULL;
 
 -- +goose Down
 DROP INDEX IF EXISTS idx_users_email_verify_token;
