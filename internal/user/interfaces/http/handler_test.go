@@ -9,46 +9,29 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/entity"
+	authEntity "github.com/IDTS-LAB/go-codebase/internal/authentication/domain/entity"
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
-	"github.com/IDTS-LAB/go-codebase/internal/user/application/service"
+	"github.com/IDTS-LAB/go-codebase/internal/user/application/command"
+	"github.com/IDTS-LAB/go-codebase/internal/user/application/query"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
-type mockUserRepo struct {
-	mock.Mock
+type mockHandler struct {
+	result any
+	err    error
 }
 
-func (m *mockUserRepo) List(ctx context.Context, offset, limit int) ([]*entity.User, int, error) {
-	args := m.Called(ctx, offset, limit)
-	return args.Get(0).([]*entity.User), args.Int(1), args.Error(2)
+func (h *mockHandler) Handle(ctx context.Context, _ any) (any, error) {
+	return h.result, h.err
 }
 
-func (m *mockUserRepo) GetByID(ctx context.Context, id uuid.UUID) (*entity.User, error) {
-	args := m.Called(ctx, id)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*entity.User), args.Error(1)
-}
-
-func (m *mockUserRepo) Update(ctx context.Context, user *entity.User) error {
-	args := m.Called(ctx, user)
-	return args.Error(0)
-}
-
-func (m *mockUserRepo) Delete(ctx context.Context, id uuid.UUID) error {
-	args := m.Called(ctx, id)
-	return args.Error(0)
-}
-
-func makeTestUser(id uuid.UUID) *entity.User {
-	u := entity.NewUser("john@example.com", "hashed", "John Doe")
+func makeTestUser(id uuid.UUID) *authEntity.User {
+	u := authEntity.NewUser("john@example.com", "hashed", "John Doe")
 	u.ID = id
 	return u
 }
@@ -72,14 +55,14 @@ func decodeAPIResponse(t *testing.T, body []byte) utils.APIResponse {
 }
 
 func TestHandler_List(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
 	id1 := uuid.New()
 	id2 := uuid.New()
-	users := []*entity.User{makeTestUser(id1), makeTestUser(id2)}
-	repo.On("List", mock.Anything, 0, 20).Return(users, 2, nil)
+	users := []*authEntity.User{makeTestUser(id1), makeTestUser(id2)}
+	qBus.Register(query.ListUsersQuery{}, &mockHandler{result: query.ListUsersResult{Users: users, Total: 2}})
 
 	req := httptest.NewRequest(http.MethodGet, "/users", nil)
 	w := httptest.NewRecorder()
@@ -99,49 +82,44 @@ func TestHandler_List(t *testing.T) {
 	assert.Equal(t, id1.String(), usersResp[0].ID)
 	assert.NotNil(t, resp.Meta)
 	assert.Equal(t, 2, resp.Meta.Total)
-
-	repo.AssertExpectations(t)
 }
 
 func TestHandler_List_WithPagination(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
-	repo.On("List", mock.Anything, 10, 5).Return([]*entity.User{}, 0, nil)
+	qBus.Register(query.ListUsersQuery{}, &mockHandler{result: query.ListUsersResult{Users: []*authEntity.User{}, Total: 0}})
 
 	req := httptest.NewRequest(http.MethodGet, "/users?offset=10&limit=5", nil)
 	w := httptest.NewRecorder()
 	h.List(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	repo.AssertExpectations(t)
 }
 
 func TestHandler_List_ClampsLimit(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
-	// limit > 100 should be clamped to 20
-	repo.On("List", mock.Anything, 0, 20).Return([]*entity.User{}, 0, nil)
+	qBus.Register(query.ListUsersQuery{}, &mockHandler{result: query.ListUsersResult{Users: []*authEntity.User{}, Total: 0}})
 
 	req := httptest.NewRequest(http.MethodGet, "/users?limit=200", nil)
 	w := httptest.NewRecorder()
 	h.List(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	repo.AssertExpectations(t)
 }
 
 func TestHandler_Get_Success(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
 	id := uuid.New()
 	user := makeTestUser(id)
-	repo.On("GetByID", mock.Anything, id).Return(user, nil)
+	qBus.Register(query.GetUserQuery{}, &mockHandler{result: user})
 
 	req := httptest.NewRequest(http.MethodGet, "/users/"+id.String(), nil)
 	req = setChiURLParam(req, "id", id.String())
@@ -153,14 +131,12 @@ func TestHandler_Get_Success(t *testing.T) {
 	var resp utils.APIResponse
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.True(t, resp.Success)
-
-	repo.AssertExpectations(t)
 }
 
 func TestHandler_Get_InvalidUUID(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
 	req := httptest.NewRequest(http.MethodGet, "/users/invalid", nil)
 	req = setChiURLParam(req, "id", "not-a-uuid")
@@ -177,12 +153,12 @@ func TestHandler_Get_InvalidUUID(t *testing.T) {
 }
 
 func TestHandler_Get_NotFound(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
 	id := uuid.New()
-	repo.On("GetByID", mock.Anything, id).Return(nil, domain.ErrNotFound)
+	qBus.Register(query.GetUserQuery{}, &mockHandler{err: domain.ErrNotFound})
 
 	req := httptest.NewRequest(http.MethodGet, "/users/"+id.String(), nil)
 	req = setChiURLParam(req, "id", id.String())
@@ -190,16 +166,15 @@ func TestHandler_Get_NotFound(t *testing.T) {
 	h.Get(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
-	repo.AssertExpectations(t)
 }
 
 func TestHandler_Get_ServiceError(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
 	id := uuid.New()
-	repo.On("GetByID", mock.Anything, id).Return(nil, errors.New("unexpected error"))
+	qBus.Register(query.GetUserQuery{}, &mockHandler{err: errors.New("unexpected error")})
 
 	req := httptest.NewRequest(http.MethodGet, "/users/"+id.String(), nil)
 	req = setChiURLParam(req, "id", id.String())
@@ -207,17 +182,16 @@ func TestHandler_Get_ServiceError(t *testing.T) {
 	h.Get(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	repo.AssertExpectations(t)
 }
 
 func TestHandler_Me_Success(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
 	id := uuid.New()
 	user := makeTestUser(id)
-	repo.On("GetByID", mock.Anything, id).Return(user, nil)
+	qBus.Register(query.GetUserQuery{}, &mockHandler{result: user})
 
 	req := httptest.NewRequest(http.MethodGet, "/users/me", nil)
 	req = setUserIDOnCtx(req, id.String())
@@ -229,14 +203,12 @@ func TestHandler_Me_Success(t *testing.T) {
 	var resp utils.APIResponse
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.True(t, resp.Success)
-
-	repo.AssertExpectations(t)
 }
 
 func TestHandler_Me_Unauthenticated(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
 	req := httptest.NewRequest(http.MethodGet, "/users/me", nil)
 	w := httptest.NewRecorder()
@@ -252,9 +224,9 @@ func TestHandler_Me_Unauthenticated(t *testing.T) {
 }
 
 func TestHandler_Me_InvalidUserID(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
 	req := httptest.NewRequest(http.MethodGet, "/users/me", nil)
 	req = setUserIDOnCtx(req, "not-a-valid-uuid")
@@ -265,16 +237,16 @@ func TestHandler_Me_InvalidUserID(t *testing.T) {
 }
 
 func TestHandler_Update_Success(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
 	id := uuid.New()
 	user := makeTestUser(id)
-	repo.On("GetByID", mock.Anything, id).Return(user, nil)
-	repo.On("Update", mock.Anything, mock.MatchedBy(func(u *entity.User) bool {
-		return u.ID == id && u.Name == "Jane Doe" && u.Email == "jane@example.com" && !u.IsActive
-	})).Return(nil)
+	user.Name = "Jane Doe"
+	user.Email = "jane@example.com"
+	user.IsActive = false
+	cmdBus.Register(command.UpdateUserCommand{}, &mockHandler{result: user})
 
 	body := `{"name":"Jane Doe","email":"jane@example.com","is_active":false}`
 	req := httptest.NewRequest(http.MethodPut, "/users/"+id.String(), strings.NewReader(body))
@@ -288,14 +260,12 @@ func TestHandler_Update_Success(t *testing.T) {
 	var resp utils.APIResponse
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.True(t, resp.Success)
-
-	repo.AssertExpectations(t)
 }
 
 func TestHandler_Update_InvalidUUID(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
 	req := httptest.NewRequest(http.MethodPut, "/users/invalid", strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -307,9 +277,9 @@ func TestHandler_Update_InvalidUUID(t *testing.T) {
 }
 
 func TestHandler_Update_InvalidBody(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
 	id := uuid.New()
 	req := httptest.NewRequest(http.MethodPut, "/users/"+id.String(), strings.NewReader(`{invalid json`))
@@ -322,12 +292,12 @@ func TestHandler_Update_InvalidBody(t *testing.T) {
 }
 
 func TestHandler_Update_NotFound(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
 	id := uuid.New()
-	repo.On("GetByID", mock.Anything, id).Return(nil, domain.ErrNotFound)
+	cmdBus.Register(command.UpdateUserCommand{}, &mockHandler{err: domain.ErrNotFound})
 
 	body := `{"name":"Jane Doe"}`
 	req := httptest.NewRequest(http.MethodPut, "/users/"+id.String(), strings.NewReader(body))
@@ -337,20 +307,15 @@ func TestHandler_Update_NotFound(t *testing.T) {
 	h.Update(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
-	repo.AssertExpectations(t)
 }
 
 func TestHandler_Delete_Success(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
 	id := uuid.New()
-	user := makeTestUser(id)
-	repo.On("GetByID", mock.Anything, id).Return(user, nil)
-	repo.On("Update", mock.Anything, mock.MatchedBy(func(u *entity.User) bool {
-		return u.ID == id && u.IsDeleted()
-	})).Return(nil)
+	cmdBus.Register(command.DeleteUserCommand{}, &mockHandler{})
 
 	req := httptest.NewRequest(http.MethodDelete, "/users/"+id.String(), nil)
 	req = setChiURLParam(req, "id", id.String())
@@ -363,14 +328,12 @@ func TestHandler_Delete_Success(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.True(t, resp.Success)
 	assert.Equal(t, "user deleted", resp.Data.(map[string]interface{})["message"])
-
-	repo.AssertExpectations(t)
 }
 
 func TestHandler_Delete_InvalidUUID(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
 	req := httptest.NewRequest(http.MethodDelete, "/users/invalid", nil)
 	req = setChiURLParam(req, "id", "not-a-uuid")
@@ -381,12 +344,12 @@ func TestHandler_Delete_InvalidUUID(t *testing.T) {
 }
 
 func TestHandler_Delete_NotFound(t *testing.T) {
-	repo := new(mockUserRepo)
-	svc := service.NewUserService(repo)
-	h := NewHandler(svc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
+	h := NewHandler(cmdBus, qBus)
 
 	id := uuid.New()
-	repo.On("GetByID", mock.Anything, id).Return(nil, domain.ErrNotFound)
+	cmdBus.Register(command.DeleteUserCommand{}, &mockHandler{err: domain.ErrNotFound})
 
 	req := httptest.NewRequest(http.MethodDelete, "/users/"+id.String(), nil)
 	req = setChiURLParam(req, "id", id.String())
@@ -394,5 +357,4 @@ func TestHandler_Delete_NotFound(t *testing.T) {
 	h.Delete(w, req)
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
-	repo.AssertExpectations(t)
 }

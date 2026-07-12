@@ -5,19 +5,23 @@ import (
 	"net/http"
 	"strconv"
 
+	authEntity "github.com/IDTS-LAB/go-codebase/internal/authentication/domain/entity"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
-	"github.com/IDTS-LAB/go-codebase/internal/user/application/service"
+	"github.com/IDTS-LAB/go-codebase/internal/user/application/command"
+	"github.com/IDTS-LAB/go-codebase/internal/user/application/query"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 type Handler struct {
-	svc *service.UserService
+	commandBus cqrs.CommandBus
+	queryBus   cqrs.QueryBus
 }
 
-func NewHandler(svc *service.UserService) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(commandBus cqrs.CommandBus, queryBus cqrs.QueryBus) *Handler {
+	return &Handler{commandBus: commandBus, queryBus: queryBus}
 }
 
 type UserResponse struct {
@@ -38,6 +42,17 @@ type UpdateUserRequest struct {
 type ListResponse struct {
 	Users []UserResponse `json:"users"`
 	Total int            `json:"total"`
+}
+
+func userToResponse(user *authEntity.User) UserResponse {
+	return UserResponse{
+		ID:        user.ID.String(),
+		Email:     user.Email,
+		Name:      user.Name,
+		IsActive:  user.IsActive,
+		CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt: user.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+	}
 }
 
 // List godoc
@@ -61,29 +76,23 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		offset = 0
 	}
 
-	users, total, err := h.svc.List(r.Context(), offset, limit)
+	resp, err := h.queryBus.Ask(r.Context(), query.ListUsersQuery{Offset: offset, Limit: limit})
 	if err != nil {
 		utils.HandlePaginated(w, nil, 0, 0, 0, err)
 		return
 	}
 
-	resp := make([]UserResponse, len(users))
-	for i, u := range users {
-		resp[i] = UserResponse{
-			ID:        u.ID.String(),
-			Email:     u.Email,
-			Name:      u.Name,
-			IsActive:  u.IsActive,
-			CreatedAt: u.CreatedAt.Format("2006-01-02T15:04:05Z"),
-			UpdatedAt: u.UpdatedAt.Format("2006-01-02T15:04:05Z"),
-		}
+	result := resp.(query.ListUsersResult)
+	usersResp := make([]UserResponse, len(result.Users))
+	for i, u := range result.Users {
+		usersResp[i] = userToResponse(u)
 	}
 
 	page := 1
 	if limit > 0 {
 		page = offset/limit + 1
 	}
-	utils.RespondPaginated(w, resp, page, limit, total)
+	utils.RespondPaginated(w, usersResp, page, limit, result.Total)
 }
 
 // Get godoc
@@ -104,20 +113,13 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.svc.GetByID(r.Context(), id)
+	resp, err := h.queryBus.Ask(r.Context(), query.GetUserQuery{ID: id})
 	if err != nil {
 		utils.Handle(w, nil, err)
 		return
 	}
 
-	utils.RespondSuccess(w, UserResponse{
-		ID:        user.ID.String(),
-		Email:     user.Email,
-		Name:      user.Name,
-		IsActive:  user.IsActive,
-		CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt: user.UpdatedAt.Format("2006-01-02T15:04:05Z"),
-	})
+	utils.RespondSuccess(w, userToResponse(resp.(*authEntity.User)))
 }
 
 // Me godoc
@@ -142,20 +144,13 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.svc.GetByID(r.Context(), id)
+	resp, err := h.queryBus.Ask(r.Context(), query.GetUserQuery{ID: id})
 	if err != nil {
 		utils.Handle(w, nil, err)
 		return
 	}
 
-	utils.RespondSuccess(w, UserResponse{
-		ID:        user.ID.String(),
-		Email:     user.Email,
-		Name:      user.Name,
-		IsActive:  user.IsActive,
-		CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt: user.UpdatedAt.Format("2006-01-02T15:04:05Z"),
-	})
+	utils.RespondSuccess(w, userToResponse(resp.(*authEntity.User)))
 }
 
 // Update godoc
@@ -189,20 +184,18 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		isActive = *req.IsActive
 	}
 
-	user, err := h.svc.Update(r.Context(), id, req.Name, req.Email, isActive)
+	resp, err := h.commandBus.Dispatch(r.Context(), command.UpdateUserCommand{
+		ID:       id,
+		Name:     req.Name,
+		Email:    req.Email,
+		IsActive: isActive,
+	})
 	if err != nil {
 		utils.Handle(w, nil, err)
 		return
 	}
 
-	utils.RespondSuccess(w, UserResponse{
-		ID:        user.ID.String(),
-		Email:     user.Email,
-		Name:      user.Name,
-		IsActive:  user.IsActive,
-		CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt: user.UpdatedAt.Format("2006-01-02T15:04:05Z"),
-	})
+	utils.RespondSuccess(w, userToResponse(resp.(*authEntity.User)))
 }
 
 // Delete godoc
@@ -223,6 +216,6 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.svc.Delete(r.Context(), id)
+	_, err = h.commandBus.Dispatch(r.Context(), command.DeleteUserCommand{ID: id})
 	utils.Handle(w, map[string]string{"message": "user deleted"}, err)
 }
