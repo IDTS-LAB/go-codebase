@@ -48,7 +48,7 @@ func (r *roleRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Rol
 	if err != nil {
 		return nil, fmt.Errorf("get role: %w", err)
 	}
-	return mapSqlcRoleToEntity(row), nil
+	return mapRoleRowToEntity(row.ID, row.Name, row.Description, row.CreatedAt, row.UpdatedAt, row.DeletedAt), nil
 }
 
 func (r *roleRepository) GetByName(ctx context.Context, name string) (*entity.Role, error) {
@@ -60,7 +60,7 @@ func (r *roleRepository) GetByName(ctx context.Context, name string) (*entity.Ro
 	if err != nil {
 		return nil, fmt.Errorf("get role by name: %w", err)
 	}
-	return mapSqlcRoleToEntity(row), nil
+	return mapRoleRowToEntity(row.ID, row.Name, row.Description, row.CreatedAt, row.UpdatedAt, row.DeletedAt), nil
 }
 
 func (r *roleRepository) GetAll(ctx context.Context, offset, limit int) ([]*entity.Role, int, error) {
@@ -160,6 +160,19 @@ func mapSqlcRoleToEntity(row sqlc.Role) *entity.Role {
 		},
 		Name:        row.Name,
 		Description: row.Description,
+	}
+}
+
+func mapRoleRowToEntity(id uuid.UUID, name, description string, createdAt, updatedAt time.Time, deletedAt sql.NullTime) *entity.Role {
+	return &entity.Role{
+		Entity: domain.Entity{
+			ID:        id,
+			CreatedAt: createdAt,
+			UpdatedAt: updatedAt,
+			DeletedAt: nullTimeToPtr(deletedAt),
+		},
+		Name:        name,
+		Description: description,
 	}
 }
 

@@ -69,12 +69,12 @@ sql:
             nullable: true
 
   - engine: "postgresql"
-    queries: "internal/shared/auditlog/queries/queries.sql"
+    queries: "internal/tenant/infrastructure/persistence/queries/queries.sql"
     schema: "migrations"
     gen:
       go:
         package: "sqlc"
-        out: "internal/shared/auditlog/sqlc"
+        out: "internal/tenant/infrastructure/persistence/sqlc"
         sql_package: "database/sql"
         emit_json_tags: true
         emit_empty_slices: true
@@ -84,3 +84,5 @@ sql:
             go_type:
               type: "[]byte"
             nullable: true
+
+

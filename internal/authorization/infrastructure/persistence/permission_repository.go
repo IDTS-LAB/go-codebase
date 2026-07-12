@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/entity"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/repository"
@@ -49,7 +50,7 @@ func (r *permissionRepository) GetByID(ctx context.Context, id uuid.UUID) (*enti
 	if err != nil {
 		return nil, fmt.Errorf("get permission: %w", err)
 	}
-	return mapSqlcPermissionToEntity(row), nil
+	return mapPermissionRowToEntity(row.ID, row.Name, row.Description, row.Resource, row.Action, row.CreatedAt, row.UpdatedAt, row.DeletedAt), nil
 }
 
 func (r *permissionRepository) GetByName(ctx context.Context, name string) (*entity.Permission, error) {
@@ -61,7 +62,7 @@ func (r *permissionRepository) GetByName(ctx context.Context, name string) (*ent
 	if err != nil {
 		return nil, fmt.Errorf("get permission by name: %w", err)
 	}
-	return mapSqlcPermissionToEntity(row), nil
+	return mapPermissionRowToEntity(row.ID, row.Name, row.Description, row.Resource, row.Action, row.CreatedAt, row.UpdatedAt, row.DeletedAt), nil
 }
 
 func (r *permissionRepository) GetAll(ctx context.Context, offset, limit int) ([]*entity.Permission, int, error) {
@@ -154,16 +155,20 @@ func (r *permissionRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func mapSqlcPermissionToEntity(row sqlc.Permission) *entity.Permission {
+	return mapPermissionRowToEntity(row.ID, row.Name, row.Description, row.Resource, row.Action, row.CreatedAt, row.UpdatedAt, row.DeletedAt)
+}
+
+func mapPermissionRowToEntity(id uuid.UUID, name, description, resource, action string, createdAt, updatedAt time.Time, deletedAt sql.NullTime) *entity.Permission {
 	return &entity.Permission{
 		Entity: domain.Entity{
-			ID:        row.ID,
-			CreatedAt: row.CreatedAt,
-			UpdatedAt: row.UpdatedAt,
-			DeletedAt: nullTimeToPtr(row.DeletedAt),
+			ID:        id,
+			CreatedAt: createdAt,
+			UpdatedAt: updatedAt,
+			DeletedAt: nullTimeToPtr(deletedAt),
 		},
-		Name:        row.Name,
-		Description: row.Description,
-		Resource:    row.Resource,
-		Action:      row.Action,
+		Name:        name,
+		Description: description,
+		Resource:    resource,
+		Action:      action,
 	}
 }

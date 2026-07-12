@@ -67,7 +67,7 @@ func (r *rolePermissionRepository) GetPermissionsByRoleID(ctx context.Context, r
 	}
 	perms := make([]*entity.Permission, len(rows))
 	for i, row := range rows {
-		perms[i] = mapSqlcPermissionToEntity(row)
+		perms[i] = mapPermissionRowToEntity(row.ID, row.Name, row.Description, row.Resource, row.Action, row.CreatedAt, row.UpdatedAt, row.DeletedAt)
 	}
 	return perms, nil
 }

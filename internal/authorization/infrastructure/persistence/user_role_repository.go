@@ -67,7 +67,7 @@ func (r *userRoleRepository) GetRolesByUserID(ctx context.Context, userID uuid.U
 	}
 	roles := make([]*entity.Role, len(rows))
 	for i, row := range rows {
-		roles[i] = mapSqlcRoleToEntity(row)
+		roles[i] = mapRoleRowToEntity(row.ID, row.Name, row.Description, row.CreatedAt, row.UpdatedAt, row.DeletedAt)
 	}
 	return roles, nil
 }
