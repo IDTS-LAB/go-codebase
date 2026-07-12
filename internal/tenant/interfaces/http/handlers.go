@@ -7,21 +7,24 @@ import (
 	"net/http"
 
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
+	"github.com/IDTS-LAB/go-codebase/internal/tenant/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/tenant/application/dto"
-	appService "github.com/IDTS-LAB/go-codebase/internal/tenant/application/service"
+	"github.com/IDTS-LAB/go-codebase/internal/tenant/application/query"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 type Handler struct {
-	svc *appService.TenantService
-	v   *validator.Validator
+	commandBus cqrs.CommandBus
+	queryBus   cqrs.QueryBus
+	v          *validator.Validator
 }
 
-func NewHandler(svc *appService.TenantService, v *validator.Validator) *Handler {
-	return &Handler{svc: svc, v: v}
+func NewHandler(commandBus cqrs.CommandBus, queryBus cqrs.QueryBus, v *validator.Validator) *Handler {
+	return &Handler{commandBus: commandBus, queryBus: queryBus, v: v}
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +37,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	resp, err := h.svc.Create(r.Context(), req)
+	resp, err := h.commandBus.Dispatch(r.Context(), command.CreateTenantCommand{
+		Name:     req.Name,
+		Slug:     req.Slug,
+		Domain:   req.Domain,
+		Settings: req.Settings,
+	})
 	if err != nil && errors.Is(err, domain.ErrAlreadyExists) {
 		utils.RespondConflict(w, err.Error())
 		return
@@ -54,8 +62,13 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	if perPage > 100 {
 		perPage = 100
 	}
-	resp, err := h.svc.List(r.Context(), page, perPage)
-	utils.HandlePaginated(w, resp.Tenants, page, perPage, resp.Total, err)
+	resp, err := h.queryBus.Ask(r.Context(), query.ListTenantsQuery{Page: page, PerPage: perPage})
+	if err != nil {
+		utils.HandlePaginated(w, nil, 0, 0, 0, err)
+		return
+	}
+	listResp := resp.(dto.TenantListResponse)
+	utils.HandlePaginated(w, listResp.Tenants, page, perPage, listResp.Total, nil)
 }
 
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +77,7 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid tenant ID")
 		return
 	}
-	resp, err := h.svc.GetByID(r.Context(), id)
+	resp, err := h.queryBus.Ask(r.Context(), query.GetTenantQuery{ID: id})
 	if err != nil && errors.Is(err, domain.ErrNotFound) {
 		utils.RespondNotFound(w, "tenant not found")
 		return
@@ -83,7 +96,13 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid request body")
 		return
 	}
-	resp, err := h.svc.Update(r.Context(), id, req.Name, req.Domain, req.Settings, req.IsActive)
+	resp, err := h.commandBus.Dispatch(r.Context(), command.UpdateTenantCommand{
+		ID:       id,
+		Name:     req.Name,
+		Domain:   req.Domain,
+		Settings: req.Settings,
+		IsActive: req.IsActive,
+	})
 	if err != nil && errors.Is(err, domain.ErrNotFound) {
 		utils.RespondNotFound(w, "tenant not found")
 		return
@@ -97,7 +116,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid tenant ID")
 		return
 	}
-	err = h.svc.Delete(r.Context(), id)
+	_, err = h.commandBus.Dispatch(r.Context(), command.DeleteTenantCommand{ID: id})
 	if err != nil && errors.Is(err, domain.ErrNotFound) {
 		utils.RespondNotFound(w, "tenant not found")
 		return
