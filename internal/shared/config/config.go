@@ -31,6 +31,7 @@ type Config struct {
 	Telemetry   TelemetryConfig
 	Asynq       AsynqConfig
 	Email       EmailConfig
+	Tenant      TenantConfig
 }
 
 // AppConfig holds application-level settings.
@@ -119,6 +120,14 @@ type TelemetryConfig struct {
 // AsynqConfig holds background job settings.
 type AsynqConfig struct {
 	RedisAddr string
+}
+
+// TenantConfig holds multi-tenancy settings.
+type TenantConfig struct {
+	Enabled       bool   `yaml:"enabled"`
+	TenantHeader  string `yaml:"tenant_header"`
+	TenantJWTClaim string `yaml:"tenant_jwt_claim"`
+	Domain        string `yaml:"domain"`
 }
 
 // EmailConfig holds email service settings.
@@ -275,6 +284,17 @@ func setDefaults(cfg *Config) {
 	}
 	if !cfg.Email.SMTP.UseTLS && cfg.Email.SMTP.Host == "localhost" {
 		cfg.Email.SMTP.UseTLS = true
+	}
+
+	// Tenant
+	if cfg.Tenant.TenantHeader == "" {
+		cfg.Tenant.TenantHeader = "X-Tenant-ID"
+	}
+	if cfg.Tenant.TenantJWTClaim == "" {
+		cfg.Tenant.TenantJWTClaim = "tenant_id"
+	}
+	if cfg.Tenant.Domain == "" {
+		cfg.Tenant.Domain = "app.com"
 	}
 }
 
@@ -482,5 +502,16 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("SENDGRID_API_KEY"); v != "" {
 		cfg.Email.SendGrid.APIKey = v
+	}
+
+	// Tenant
+	if v := os.Getenv("MULTITENANCY_ENABLED"); v != "" {
+		cfg.Tenant.Enabled = v == "true" || v == "1"
+	}
+	if v := os.Getenv("MULTITENANCY_TENANT_HEADER"); v != "" {
+		cfg.Tenant.TenantHeader = v
+	}
+	if v := os.Getenv("MULTITENANCY_DOMAIN"); v != "" {
+		cfg.Tenant.Domain = v
 	}
 }

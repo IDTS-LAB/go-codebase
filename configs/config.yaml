@@ -54,6 +54,12 @@ auth:
   lockout_duration: 900
   token_denylist: true
 
+multitenancy:
+  enabled: false
+  tenant_header: "X-Tenant-ID"
+  tenant_jwt_claim: "tenant_id"
+  domain: "app.com"
+
 cors:
   allowed_origins: ["http://localhost:3000", "http://localhost:8080"]
   allowed_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]

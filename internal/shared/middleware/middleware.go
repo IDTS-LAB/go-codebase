@@ -27,6 +27,7 @@ const (
 	UserIDKey    contextKey = "user_id"
 	UserEmailKey contextKey = "user_email"
 	UserRoleKey  contextKey = "user_role"
+	TenantIDKey  contextKey = "tenant_id"
 )
 
 func ErrorHandler(log domain.Logger, errorRepo *auditlog.Repository) func(http.Handler) http.Handler {
@@ -287,6 +288,13 @@ func GetUserEmail(ctx context.Context) string {
 
 func GetUserRole(ctx context.Context) string {
 	if v, ok := ctx.Value(UserRoleKey).(string); ok {
+		return v
+	}
+	return ""
+}
+
+func GetTenantID(ctx context.Context) string {
+	if v, ok := ctx.Value(TenantIDKey).(string); ok {
 		return v
 	}
 	return ""
