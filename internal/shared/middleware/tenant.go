@@ -43,7 +43,7 @@ func domainFromHost(host, domainSuffix string) string {
 }
 
 func GetTenantIDFromClaims(ctx context.Context) string {
-	if v, ok := ctx.Value(TenantIDKey).(string); ok {
+	if v, ok := ctx.Value(TenantClaimKey).(string); ok {
 		return v
 	}
 	return ""

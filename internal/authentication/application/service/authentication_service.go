@@ -14,6 +14,7 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/repository"
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/events"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -145,7 +146,14 @@ func (s *AuthenticationService) Login(ctx context.Context, email, password strin
 }
 
 func (s *AuthenticationService) GenerateTokens(ctx context.Context, user *entity.User) (*TokenPair, error) {
-	accessToken, err := s.tokenService.GenerateToken(user.ID.String(), user.Email, "user")
+	tc := &domain.TokenClaims{
+		UserID:   user.ID.String(),
+		Email:    user.Email,
+		Role:     "user",
+		JTI:      uuid.New().String(),
+		TenantID: middleware.GetTenantID(ctx),
+	}
+	accessToken, err := s.tokenService.GenerateToken(tc)
 	if err != nil {
 		return nil, fmt.Errorf("generate access token: %w", err)
 	}

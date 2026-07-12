@@ -138,7 +138,7 @@ func (m *mockRefreshRepo) DeleteExpired(_ context.Context) error {
 
 type mockTokenService struct{}
 
-func (mockTokenService) GenerateToken(_, _, _ string) (string, error) {
+func (mockTokenService) GenerateToken(_ *domain.TokenClaims) (string, error) {
 	return "mock-access-token", nil
 }
 

@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
-	"github.com/IDTS-LAB/go-codebase/internal/shared/auditlog/sqlc"
 	"github.com/google/uuid"
 )
 
@@ -23,6 +23,7 @@ type AuditLog struct {
 	UserAgent    string    `json:"user_agent"`
 	RequestBody  *string   `json:"request_body,omitempty"`
 	ResponseSize int       `json:"response_size"`
+	TenantID     string    `json:"tenant_id,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
@@ -42,6 +43,7 @@ type ErrorLog struct {
 	UserAgent   string          `json:"user_agent"`
 	RequestBody *string         `json:"request_body,omitempty"`
 	Metadata    json.RawMessage `json:"metadata,omitempty"`
+	TenantID    string          `json:"tenant_id,omitempty"`
 	CreatedAt   time.Time       `json:"created_at"`
 }
 
@@ -54,52 +56,64 @@ func NewRepository(db *sql.DB) *Repository {
 }
 
 func (r *Repository) InsertAuditLog(ctx context.Context, log *AuditLog) error {
-	q := sqlc.New(r.db)
 	id, err := uuid.Parse(log.ID)
 	if err != nil {
 		return err
 	}
-	return q.InsertAuditLog(ctx, sqlc.InsertAuditLogParams{
-		ID:           id,
-		RequestID:    log.RequestID,
-		UserID:       ptrStringToNullUUID(log.UserID),
-		UserEmail:    ptrStringToNullString(log.UserEmail),
-		Method:       log.Method,
-		Path:         log.Path,
-		StatusCode:   int32(log.StatusCode),
-		DurationMs:   log.DurationMs,
-		Ip:           log.IP,
-		UserAgent:    log.UserAgent,
-		RequestBody:  ptrStringToNullString(log.RequestBody),
-		ResponseSize: int32(log.ResponseSize),
-		CreatedAt:    log.CreatedAt,
-	})
+	_, err = r.db.ExecContext(ctx,
+		`INSERT INTO audit_logs (id, request_id, user_id, user_email, method, path, status_code, duration_ms, ip, user_agent, request_body, response_size, tenant_id, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+		id,
+		log.RequestID,
+		ptrStringToNullUUID(log.UserID),
+		ptrStringToNullString(log.UserEmail),
+		log.Method,
+		log.Path,
+		int32(log.StatusCode),
+		log.DurationMs,
+		log.IP,
+		log.UserAgent,
+		ptrStringToNullString(log.RequestBody),
+		int32(log.ResponseSize),
+		log.TenantID,
+		log.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("insert audit log: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) InsertErrorLog(ctx context.Context, log *ErrorLog) error {
-	q := sqlc.New(r.db)
 	id, err := uuid.Parse(log.ID)
 	if err != nil {
 		return err
 	}
-	return q.InsertErrorLog(ctx, sqlc.InsertErrorLogParams{
-		ID:          id,
-		RequestID:   log.RequestID,
-		UserID:      ptrStringToNullUUID(log.UserID),
-		UserEmail:   ptrStringToNullString(log.UserEmail),
-		Level:       log.Level,
-		Message:     log.Message,
-		Error:       log.Error,
-		StackTrace:  log.StackTrace,
-		Method:      log.Method,
-		Path:        log.Path,
-		StatusCode:  int32(log.StatusCode),
-		Ip:          log.IP,
-		UserAgent:   log.UserAgent,
-		RequestBody: ptrStringToNullString(log.RequestBody),
-		Column15:    log.Metadata,
-		CreatedAt:   log.CreatedAt,
-	})
+	_, err = r.db.ExecContext(ctx,
+		`INSERT INTO error_logs (id, request_id, user_id, user_email, level, message, error, stack_trace, method, path, status_code, ip, user_agent, request_body, metadata, tenant_id, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16, $17)`,
+		id,
+		log.RequestID,
+		ptrStringToNullUUID(log.UserID),
+		ptrStringToNullString(log.UserEmail),
+		log.Level,
+		log.Message,
+		log.Error,
+		log.StackTrace,
+		log.Method,
+		log.Path,
+		int32(log.StatusCode),
+		log.IP,
+		log.UserAgent,
+		ptrStringToNullString(log.RequestBody),
+		log.Metadata,
+		log.TenantID,
+		log.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("insert error log: %w", err)
+	}
+	return nil
 }
 
 func ptrStringToNullString(s *string) sql.NullString {

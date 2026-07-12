@@ -7,7 +7,6 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/config"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"go.uber.org/fx"
 )
 
@@ -26,22 +25,24 @@ func NewJWTTokenService(cfg *config.Config) domain.TokenService {
 }
 
 type jwtClaims struct {
-	UserID string `json:"user_id"`
-	Email  string `json:"email"`
-	Role   string `json:"role"`
+	UserID   string `json:"user_id"`
+	Email    string `json:"email"`
+	Role     string `json:"role"`
+	TenantID string `json:"tenant_id"`
 	jwt.RegisteredClaims
 }
 
-func (s *JWTTokenService) GenerateToken(userID, email, role string) (string, error) {
+func (s *JWTTokenService) GenerateToken(tc *domain.TokenClaims) (string, error) {
 	claims := jwtClaims{
-		UserID: userID,
-		Email:  email,
-		Role:   role,
+		UserID:   tc.UserID,
+		Email:    tc.Email,
+		Role:     tc.Role,
+		TenantID: tc.TenantID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.expiration)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Subject:   userID,
-			ID:        uuid.New().String(),
+			Subject:   tc.UserID,
+			ID:        tc.JTI,
 		},
 	}
 
@@ -71,9 +72,10 @@ func (s *JWTTokenService) ValidateToken(tokenString string) (*domain.TokenClaims
 	}
 
 	return &domain.TokenClaims{
-		UserID: claims.UserID,
-		Email:  claims.Email,
-		Role:   claims.Role,
-		JTI:    claims.ID,
+		UserID:   claims.UserID,
+		Email:    claims.Email,
+		Role:     claims.Role,
+		JTI:      claims.ID,
+		TenantID: claims.TenantID,
 	}, nil
 }

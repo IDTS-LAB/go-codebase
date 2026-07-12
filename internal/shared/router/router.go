@@ -12,10 +12,11 @@ import (
 const APIPrefix = "/api/v1"
 
 type Handlers struct {
-	Auth  *chi.Mux
-	Todo  *chi.Mux
-	Authz *chi.Mux
-	User  *chi.Mux
+	Auth   *chi.Mux
+	Todo   *chi.Mux
+	Authz  *chi.Mux
+	User   *chi.Mux
+	Tenant *chi.Mux
 }
 
 func NewRouter(h Handlers, mw middleware.Registry, log domain.Logger, cfg *config.Config, db *sql.DB) *chi.Mux {
@@ -44,10 +45,12 @@ func NewRouter(h Handlers, mw middleware.Registry, log domain.Logger, cfg *confi
 
 		r.Group(func(r chi.Router) {
 			r.Use(mw.Auth)
+			r.Use(middleware.TenantResolver(&cfg.Tenant))
 			r.Use(mw.MaxBodySize)
 			r.Mount("/todos", h.Todo)
 			r.Mount("/users", h.User)
 			r.Mount("/auth/sessions", h.Authz)
+			r.Mount("/admin/tenants", h.Tenant)
 		})
 	})
 

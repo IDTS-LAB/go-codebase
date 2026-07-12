@@ -23,11 +23,12 @@ import (
 type contextKey string
 
 const (
-	RequestIDKey contextKey = "request_id"
-	UserIDKey    contextKey = "user_id"
-	UserEmailKey contextKey = "user_email"
-	UserRoleKey  contextKey = "user_role"
-	TenantIDKey  contextKey = "tenant_id"
+	RequestIDKey  contextKey = "request_id"
+	UserIDKey     contextKey = "user_id"
+	UserEmailKey  contextKey = "user_email"
+	UserRoleKey   contextKey = "user_role"
+	TenantIDKey   contextKey = "tenant_id"
+	TenantClaimKey contextKey = "tenant_claim"
 )
 
 func ErrorHandler(log domain.Logger, errorRepo *auditlog.Repository) func(http.Handler) http.Handler {
@@ -97,6 +98,7 @@ func persistError(r *http.Request, repo *auditlog.Repository, log domain.Logger,
 		StatusCode: status,
 		IP:         r.RemoteAddr,
 		UserAgent:  r.UserAgent(),
+		TenantID:   GetTenantID(r.Context()),
 		CreatedAt:  time.Now(),
 	}
 
@@ -207,6 +209,7 @@ func Authentication(tokenSvc domain.TokenService) func(http.Handler) http.Handle
 			ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
 			ctx = context.WithValue(ctx, UserEmailKey, claims.Email)
 			ctx = context.WithValue(ctx, UserRoleKey, claims.Role)
+			ctx = context.WithValue(ctx, TenantClaimKey, claims.TenantID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -239,6 +242,7 @@ func AuthenticationWithDenylist(tokenSvc domain.TokenService, denylistChecker fu
 			ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
 			ctx = context.WithValue(ctx, UserEmailKey, claims.Email)
 			ctx = context.WithValue(ctx, UserRoleKey, claims.Role)
+			ctx = context.WithValue(ctx, TenantClaimKey, claims.TenantID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

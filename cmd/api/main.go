@@ -30,7 +30,10 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/router"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/telemetry"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/tenantfilter"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
+	"github.com/IDTS-LAB/go-codebase/internal/tenant"
+	tenantHTTP "github.com/IDTS-LAB/go-codebase/internal/tenant/interfaces/http"
 	"github.com/IDTS-LAB/go-codebase/internal/todo"
 	todoHTTP "github.com/IDTS-LAB/go-codebase/internal/todo/interfaces/http"
 	"github.com/IDTS-LAB/go-codebase/internal/user"
@@ -47,16 +50,17 @@ func main() {
 	}
 
 	var (
-		authHandler  *authHTTP.Handler
-		todoHandler  *todoHTTP.Handler
-		authzHandler *authzHTTP.Handler
-		userHandler  *userHTTP.Handler
-		enforcer     *casbin.Enforcer
-		log          domain.Logger
-		db           *sql.DB
-		rdb          *redis.Client
-		tokenSvc     domain.TokenService
-		errorRepo    *auditlog.Repository
+		authHandler   *authHTTP.Handler
+		todoHandler   *todoHTTP.Handler
+		authzHandler  *authzHTTP.Handler
+		userHandler   *userHTTP.Handler
+		tenantHandler *tenantHTTP.Handler
+		enforcer      *casbin.Enforcer
+		log           domain.Logger
+		db            *sql.DB
+		rdb           *redis.Client
+		tokenSvc      domain.TokenService
+		errorRepo     *auditlog.Repository
 	)
 
 	app := fx.New(
@@ -78,9 +82,13 @@ func main() {
 		authorization.Module,
 		todo.Module,
 		user.Module,
+		tenant.Module,
 
 		// Shared
 		fx.Provide(auditlog.NewRepository),
+		fx.Provide(func(cfg *config.Config) *tenantfilter.Config {
+			return &tenantfilter.Config{Enabled: cfg.Tenant.Enabled}
+		}),
 
 		// Event handlers
 		fx.Invoke(func(bus events.EventBus, eh *authEventBus.EmailHandler) {
@@ -102,6 +110,7 @@ func main() {
 		fx.Populate(&todoHandler),
 		fx.Populate(&authzHandler),
 		fx.Populate(&userHandler),
+		fx.Populate(&tenantHandler),
 		fx.Populate(&enforcer),
 		fx.Populate(&log),
 		fx.Populate(&db),
@@ -121,10 +130,11 @@ func main() {
 	mw := middleware.NewRegistry(tokenSvc, rdb, cfg, log, errorRepo, enforcer)
 
 	root := router.NewRouter(router.Handlers{
-		Auth:  authHTTP.NewRouter(authHandler, mw.Auth),
-		Todo:  todoHTTP.NewRouter(todoHandler, mw.Auth, enforcer),
-		Authz: authzHTTP.NewRouter(authzHandler, mw.Auth, enforcer),
-		User:  userHTTP.NewRouter(userHandler, mw.Auth, enforcer),
+		Auth:   authHTTP.NewRouter(authHandler, mw.Auth),
+		Todo:   todoHTTP.NewRouter(todoHandler, mw.Auth, enforcer),
+		Authz:  authzHTTP.NewRouter(authzHandler, mw.Auth, enforcer),
+		User:   userHTTP.NewRouter(userHandler, mw.Auth, enforcer),
+		Tenant: tenantHTTP.NewRouter(tenantHandler, mw.Auth, enforcer),
 	}, mw, log, cfg, db)
 
 	srv := &http.Server{

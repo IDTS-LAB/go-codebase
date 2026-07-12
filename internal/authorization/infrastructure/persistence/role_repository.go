@@ -10,15 +10,18 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/repository"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/infrastructure/persistence/sqlc"
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/tenantfilter"
 	"github.com/google/uuid"
 )
 
 type roleRepository struct {
-	db *sql.DB
+	db           *sql.DB
+	tenantConfig *tenantfilter.Config
 }
 
-func NewRoleRepository(db *sql.DB) repository.RoleRepository {
-	return &roleRepository{db: db}
+func NewRoleRepository(db *sql.DB, tenantConfig *tenantfilter.Config) repository.RoleRepository {
+	return &roleRepository{db: db, tenantConfig: tenantConfig}
 }
 
 func (r *roleRepository) Create(ctx context.Context, role *entity.Role) error {
@@ -61,25 +64,60 @@ func (r *roleRepository) GetByName(ctx context.Context, name string) (*entity.Ro
 }
 
 func (r *roleRepository) GetAll(ctx context.Context, offset, limit int) ([]*entity.Role, int, error) {
-	q := sqlc.New(r.db)
+	var args []interface{}
+	countQuery := "SELECT COUNT(*) FROM roles WHERE deleted_at IS NULL"
+	dataQuery := "SELECT id, name, description, created_at, updated_at, deleted_at FROM roles WHERE deleted_at IS NULL"
 
-	total, err := q.CountRoles(ctx)
+	if r.tenantConfig != nil && r.tenantConfig.Enabled {
+		tenantID := middleware.GetTenantID(ctx)
+		if tenantID != "" {
+			countQuery += " AND tenant_id = $1"
+			dataQuery += " AND tenant_id = $1"
+			args = append(args, tenantID)
+		}
+	}
+
+	var total int64
+	var err error
+	if len(args) > 0 {
+		err = r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
+	} else {
+		err = r.db.QueryRowContext(ctx, countQuery).Scan(&total)
+	}
 	if err != nil {
 		return nil, 0, fmt.Errorf("count roles: %w", err)
 	}
 
-	rows, err := q.ListRoles(ctx, sqlc.ListRolesParams{
-		Limit:  int32(limit),
-		Offset: int32(offset),
-	})
+	if len(args) > 0 {
+		dataQuery += " ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+		args = append(args, limit, offset)
+	} else {
+		dataQuery += " ORDER BY created_at DESC LIMIT $1 OFFSET $2"
+		args = append(args, limit, offset)
+	}
+
+	rows, err := r.db.QueryContext(ctx, dataQuery, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query roles: %w", err)
 	}
+	defer rows.Close()
 
-	roles := make([]*entity.Role, len(rows))
-	for i, row := range rows {
-		roles[i] = mapSqlcRoleToEntity(row)
+	var roles []*entity.Role
+	for rows.Next() {
+		var rl entity.Role
+		var deletedAt sql.NullTime
+		if err := rows.Scan(&rl.ID, &rl.Name, &rl.Description, &rl.CreatedAt, &rl.UpdatedAt, &deletedAt); err != nil {
+			return nil, 0, fmt.Errorf("scan role: %w", err)
+		}
+		if deletedAt.Valid {
+			rl.DeletedAt = &deletedAt.Time
+		}
+		roles = append(roles, &rl)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("rows iteration: %w", err)
+	}
+
 	return roles, int(total), nil
 }
 

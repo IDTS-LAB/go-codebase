@@ -41,6 +41,7 @@ func AuditLog(repo *auditlog.Repository) func(http.Handler) http.Handler {
 				IP:           r.RemoteAddr,
 				UserAgent:    r.UserAgent(),
 				ResponseSize: wrapped.bytesWritten,
+				TenantID:     GetTenantID(r.Context()),
 				CreatedAt:    time.Now(),
 			}
 
