@@ -8,7 +8,7 @@ import (
 )
 
 type UserRepository interface {
-	List(ctx context.Context, offset, limit int) ([]*entity.User, int, error)
+	List(ctx context.Context, cursor *string, limit int) ([]*entity.User, *string, *string, bool, bool, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*entity.User, error)
 	Update(ctx context.Context, user *entity.User) error
 	Delete(ctx context.Context, id uuid.UUID) error
