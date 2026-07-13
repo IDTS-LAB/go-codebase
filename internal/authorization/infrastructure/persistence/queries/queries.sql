@@ -10,13 +10,6 @@ FROM roles WHERE id = $1 AND deleted_at IS NULL;
 SELECT id, name, description, created_at, updated_at, deleted_at
 FROM roles WHERE name = $1 AND deleted_at IS NULL;
 
--- name: ListRoles :many
-SELECT id, name, description, created_at, updated_at, deleted_at
-FROM roles WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2;
-
--- name: CountRoles :one
-SELECT COUNT(*) FROM roles WHERE deleted_at IS NULL;
-
 -- name: UpdateRole :execrows
 UPDATE roles SET name = $2, description = $3, updated_at = $4 WHERE id = $1 AND deleted_at IS NULL;
 
@@ -34,13 +27,6 @@ FROM permissions WHERE id = $1 AND deleted_at IS NULL;
 -- name: GetPermissionByName :one
 SELECT id, name, description, resource, action, created_at, updated_at, deleted_at
 FROM permissions WHERE name = $1 AND deleted_at IS NULL;
-
--- name: ListPermissions :many
-SELECT id, name, description, resource, action, created_at, updated_at, deleted_at
-FROM permissions WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2;
-
--- name: CountPermissions :one
-SELECT COUNT(*) FROM permissions WHERE deleted_at IS NULL;
 
 -- name: UpdatePermission :execrows
 UPDATE permissions SET name = $2, description = $3, resource = $4, action = $5, updated_at = $6 WHERE id = $1 AND deleted_at IS NULL;
