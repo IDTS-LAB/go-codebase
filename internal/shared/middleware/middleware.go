@@ -16,6 +16,7 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/google/uuid"
 	"github.com/rs/cors"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -49,10 +50,12 @@ func ErrorHandler(log domain.Logger, errorRepo *auditlog.Repository) func(http.H
 						domain.String("stack", stack),
 					)
 
+					ctx = utils.SetErrorInfo(ctx, fmt.Errorf("%v", err), stack)
+
 					persistError(r, errorRepo, log, http.StatusInternalServerError,
 						"panic recovered", fmt.Sprintf("%v", err), stack)
 
-					utils.RespondInternalError(w, "internal server error")
+					utils.RespondInternalErrorFromRequest(w, r.WithContext(ctx), fmt.Sprintf("%v", err))
 				}
 			}()
 			next.ServeHTTP(w, r)
@@ -68,13 +71,6 @@ func ErrorRecorder(log domain.Logger, errorRepo *auditlog.Repository) func(http.
 
 			if wrapped.statusCode >= 500 {
 				ctx := r.Context()
-				if span := trace.SpanFromContext(ctx); span.IsRecording() {
-					span.SetStatus(codes.Error, http.StatusText(wrapped.statusCode))
-					if wrapped.errMsg != "" {
-						span.RecordError(fmt.Errorf("%s", wrapped.errMsg))
-					}
-				}
-
 				msg := http.StatusText(wrapped.statusCode)
 				errMsg := wrapped.errMsg
 				stack := wrapped.stack
@@ -82,6 +78,16 @@ func ErrorRecorder(log domain.Logger, errorRepo *auditlog.Repository) func(http.
 					msg = info.Err.Error()
 					errMsg = info.Err.Error()
 					stack = info.Stack
+				}
+
+				if span := trace.SpanFromContext(ctx); span.IsRecording() {
+					span.SetStatus(codes.Error, msg)
+					span.RecordError(fmt.Errorf("%s", errMsg))
+					span.AddEvent("exception",
+						trace.WithAttributes(
+							attribute.String("exception.message", errMsg),
+						),
+					)
 				}
 
 				persistError(r, errorRepo, log, wrapped.statusCode, msg, errMsg, stack)

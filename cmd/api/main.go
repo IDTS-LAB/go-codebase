@@ -57,6 +57,8 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
+	fmt.Printf("[config] env=%s log_format=%s log_level=%s\n", cfg.App.Env, cfg.Log.Format, cfg.Log.Level)
+
 	var (
 		authHandler     *authHTTP.Handler
 		todoHandler     *todoHTTP.Handler

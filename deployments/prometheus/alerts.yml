@@ -36,7 +36,7 @@ groups:
           severity: warning
         annotations:
           summary: "High memory usage"
-          description: "Go process RSS is {{ $value | humanizeBytes }}."
+          description: "Go process RSS is {{ $value | humanize1024 }} bytes."
 
       - alert: DatabaseConnectionPoolExhaustion
         expr: pg_stat_database_numbackends > 40

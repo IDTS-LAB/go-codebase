@@ -25,26 +25,25 @@ func NewRecorder() *Recorder {
 
 func (r *Recorder) IncrementCounter(_ context.Context, name string, labels ...string) {
 	vec := r.getOrCreateCounter(name)
-	if len(labels)%2 != 0 {
-		labels = append(labels, "")
-	}
-	vec.WithLabelValues(labels...).Inc()
+	vec.WithLabelValues(extractValues(labels)...).Inc()
 }
 
 func (r *Recorder) ObserveHistogram(_ context.Context, name string, value float64, labels ...string) {
 	vec := r.getOrCreateHistogram(name)
-	if len(labels)%2 != 0 {
-		labels = append(labels, "")
-	}
-	vec.WithLabelValues(labels...).Observe(value)
+	vec.WithLabelValues(extractValues(labels)...).Observe(value)
 }
 
 func (r *Recorder) SetGauge(_ context.Context, name string, value float64, labels ...string) {
 	vec := r.getOrCreateGauge(name)
-	if len(labels)%2 != 0 {
-		labels = append(labels, "")
+	vec.WithLabelValues(extractValues(labels)...).Set(value)
+}
+
+func extractValues(pairs []string) []string {
+	vals := make([]string, 0, len(pairs)/2)
+	for i := 1; i < len(pairs); i += 2 {
+		vals = append(vals, pairs[i])
 	}
-	vec.WithLabelValues(labels...).Set(value)
+	return vals
 }
 
 func (r *Recorder) getOrCreateCounter(name string) *prometheus.CounterVec {

@@ -52,7 +52,7 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 		Name:        req.Name,
 		Description: req.Description,
 	})
-	utils.HandleCreated(w, resp, err)
+	utils.HandleCreated(w, r, resp, err)
 }
 
 // ListRoles godoc
@@ -106,7 +106,7 @@ func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp, err := h.queryBus.Ask(r.Context(), query.GetRoleQuery{ID: id})
-	utils.Handle(w, resp, err)
+	utils.Handle(w, r, resp, err)
 }
 
 // UpdateRole godoc
@@ -138,7 +138,7 @@ func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		Name:        req.Name,
 		Description: req.Description,
 	})
-	utils.Handle(w, resp, err)
+	utils.Handle(w, r, resp, err)
 }
 
 // DeleteRole godoc
@@ -157,7 +157,7 @@ func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err = h.commandBus.Dispatch(r.Context(), command.DeleteRoleCommand{ID: id})
-	utils.HandleNoContent(w, err)
+	utils.HandleNoContent(w, r, err)
 }
 
 // CreatePermission godoc
@@ -188,7 +188,7 @@ func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 		Resource:    req.Resource,
 		Action:      req.Action,
 	})
-	utils.HandleCreated(w, resp, err)
+	utils.HandleCreated(w, r, resp, err)
 }
 
 // ListPermissions godoc
@@ -242,7 +242,7 @@ func (h *Handler) GetPermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp, err := h.queryBus.Ask(r.Context(), query.GetPermissionQuery{ID: id})
-	utils.Handle(w, resp, err)
+	utils.Handle(w, r, resp, err)
 }
 
 // UpdatePermission godoc
@@ -276,7 +276,7 @@ func (h *Handler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
 		Resource:    req.Resource,
 		Action:      req.Action,
 	})
-	utils.Handle(w, resp, err)
+	utils.Handle(w, r, resp, err)
 }
 
 // DeletePermission godoc
@@ -295,7 +295,7 @@ func (h *Handler) DeletePermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err = h.commandBus.Dispatch(r.Context(), command.DeletePermissionCommand{ID: id})
-	utils.HandleNoContent(w, err)
+	utils.HandleNoContent(w, r, err)
 }
 
 // AssignRole godoc
@@ -324,7 +324,7 @@ func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
 		UserID: req.UserID,
 		RoleID: req.RoleID,
 	})
-	utils.HandleNoContent(w, err)
+	utils.HandleNoContent(w, r, err)
 }
 
 // RemoveRole godoc
@@ -352,7 +352,7 @@ func (h *Handler) RemoveRole(w http.ResponseWriter, r *http.Request) {
 		UserID: userID,
 		RoleID: roleID,
 	})
-	utils.HandleNoContent(w, err)
+	utils.HandleNoContent(w, r, err)
 }
 
 // GetUserRoles godoc
@@ -372,7 +372,7 @@ func (h *Handler) GetUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp, err := h.queryBus.Ask(r.Context(), query.GetUserRolesQuery{UserID: userID})
-	utils.Handle(w, resp, err)
+	utils.Handle(w, r, resp, err)
 }
 
 // AssignPermission godoc
@@ -401,7 +401,7 @@ func (h *Handler) AssignPermission(w http.ResponseWriter, r *http.Request) {
 		RoleID:       req.RoleID,
 		PermissionID: req.PermissionID,
 	})
-	utils.HandleNoContent(w, err)
+	utils.HandleNoContent(w, r, err)
 }
 
 // RemovePermission godoc
@@ -429,7 +429,7 @@ func (h *Handler) RemovePermission(w http.ResponseWriter, r *http.Request) {
 		RoleID:       roleID,
 		PermissionID: permID,
 	})
-	utils.HandleNoContent(w, err)
+	utils.HandleNoContent(w, r, err)
 }
 
 // GetRolePermissions godoc
@@ -449,7 +449,7 @@ func (h *Handler) GetRolePermissions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp, err := h.queryBus.Ask(r.Context(), query.GetRolePermissionsQuery{RoleID: roleID})
-	utils.Handle(w, resp, err)
+	utils.Handle(w, r, resp, err)
 }
 
 // CheckPermission godoc
@@ -490,5 +490,5 @@ func (h *Handler) CheckPermission(w http.ResponseWriter, r *http.Request) {
 		Action:   req.Action,
 	})
 	allowed, _ := resp.(bool)
-	utils.Handle(w, dto.CheckPermissionResponse{Allowed: allowed}, err)
+	utils.Handle(w, r, dto.CheckPermissionResponse{Allowed: allowed}, err)
 }

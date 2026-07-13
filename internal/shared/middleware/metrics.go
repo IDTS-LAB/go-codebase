@@ -20,11 +20,11 @@ func Metrics(recorder domain.MetricsRecorder) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
-			recorder.IncrementCounter(r.Context(), MetricRequestsActive, "method", r.Method, "path", r.URL.Path)
-			defer recorder.IncrementCounter(r.Context(), MetricRequestsActive, "method", r.Method, "path", r.URL.Path)
+			recorder.IncrementCounter(r.Context(), MetricRequestsActive, "method", r.Method, "path", r.URL.Path, "status", "0")
+			defer recorder.IncrementCounter(r.Context(), MetricRequestsActive, "method", r.Method, "path", r.URL.Path, "status", "0")
 
 			if r.ContentLength > 0 {
-				recorder.ObserveHistogram(r.Context(), MetricRequestSize, float64(r.ContentLength), "method", r.Method, "path", r.URL.Path)
+				recorder.ObserveHistogram(r.Context(), MetricRequestSize, float64(r.ContentLength), "method", r.Method, "path", r.URL.Path, "status", "0")
 			}
 
 			wrapped := &metricsWriter{ResponseWriter: w, statusCode: http.StatusOK}

@@ -118,7 +118,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.queryBus.Ask(r.Context(), query.GetUserQuery{ID: id})
 	if err != nil {
-		utils.Handle(w, nil, err)
+		utils.Handle(w, r, nil, err)
 		return
 	}
 
@@ -149,7 +149,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.profileProv.GetProfile(r.Context(), id)
 	if err != nil {
-		utils.Handle(w, nil, err)
+		utils.Handle(w, r, nil, err)
 		return
 	}
 
@@ -194,7 +194,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		IsActive: isActive,
 	})
 	if err != nil {
-		utils.Handle(w, nil, err)
+		utils.Handle(w, r, nil, err)
 		return
 	}
 
@@ -220,5 +220,5 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = h.commandBus.Dispatch(r.Context(), command.DeleteUserCommand{ID: id})
-	utils.Handle(w, map[string]string{"message": "user deleted"}, err)
+	utils.Handle(w, r, map[string]string{"message": "user deleted"}, err)
 }

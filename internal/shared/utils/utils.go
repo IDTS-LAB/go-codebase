@@ -3,10 +3,14 @@ package utils
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"runtime/debug"
 
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var IsProduction bool
@@ -142,23 +146,6 @@ func RespondInternalErrorFromRequest(w http.ResponseWriter, r *http.Request, mes
 	RespondJSON(w, http.StatusInternalServerError, resp)
 }
 
-func MapError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, domain.ErrNotFound):
-		RespondNotFound(w, err.Error())
-	case errors.Is(err, domain.ErrAlreadyExists) || errors.Is(err, domain.ErrConflict):
-		RespondConflict(w, err.Error())
-	case errors.Is(err, domain.ErrValidation):
-		RespondBadRequest(w, err.Error())
-	case errors.Is(err, domain.ErrForbidden):
-		RespondForbidden(w, "FORBIDDEN", err.Error())
-	case errors.Is(err, domain.ErrUnauthorized):
-		RespondUnauthorized(w, err.Error())
-	default:
-		RespondInternalError(w, "internal server error")
-	}
-}
-
 func MapErrorFromRequest(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
@@ -173,7 +160,23 @@ func MapErrorFromRequest(w http.ResponseWriter, r *http.Request, err error) {
 		RespondUnauthorized(w, err.Error())
 	default:
 		stack := string(debug.Stack())
+		span := trace.SpanFromContext(r.Context())
+		if span.IsRecording() {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err)
+			span.AddEvent("exception",
+				trace.WithAttributes(
+					attribute.String("exception.type", fmt.Sprintf("%T", err)),
+					attribute.String("exception.message", err.Error()),
+					attribute.String("exception.stacktrace", stack),
+				),
+			)
+		}
 		ctx := SetErrorInfo(r.Context(), err, stack)
-		RespondInternalErrorFromRequest(w, r.WithContext(ctx), "internal server error")
+		msg := "internal server error"
+		if !IsProduction {
+			msg = err.Error()
+		}
+		RespondInternalErrorFromRequest(w, r.WithContext(ctx), msg)
 	}
 }

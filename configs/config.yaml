@@ -1,7 +1,8 @@
 # =============================================================================
 # Application
 # =============================================================================
-app_env: development
+app:
+  env: development
 
 # =============================================================================
 # Server
@@ -21,7 +22,7 @@ database:
   port: 5432
   user: postgres
   password: postgres
-  name: go_codebase
+  name: codebase
   sslmode: disable
   max_open_conns: 25
   max_idle_conns: 5
@@ -45,11 +46,9 @@ nats:
 # =============================================================================
 # Authentication & Security
 # =============================================================================
-jwt:
+auth:
   secret: your-secret-key-change-in-production
   expiration: 3600
-
-auth:
   max_login_attempts: 5
   lockout_duration: 900
   token_denylist: true
@@ -90,7 +89,7 @@ log:
 
 telemetry:
   service_name: go-codebase
-  exporter_endpoint: http://localhost:4318
+  exporter_endpoint: localhost:4318
   sample_rate: 1.0
 
 # =============================================================================

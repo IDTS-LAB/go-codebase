@@ -44,7 +44,7 @@ func NewTracerProvider(cfg *config.Config, log *zap.Logger, lc fx.Lifecycle) (*s
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String(cfg.Telemetry.ServiceName),
-			attribute.String("environment", "production"),
+			attribute.String("environment", cfg.App.Env),
 		),
 	)
 	if err != nil {
