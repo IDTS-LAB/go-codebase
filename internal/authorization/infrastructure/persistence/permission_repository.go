@@ -90,9 +90,9 @@ func (r *permissionRepository) GetAll(ctx context.Context, cursorArg *string, li
 	}
 
 	dataQuery := fmt.Sprintf("SELECT id, name, description, resource, action, created_at, updated_at, deleted_at FROM permissions %s ORDER BY created_at DESC, id DESC LIMIT $%d", whereClause, nextPos)
-	dataArgs := append(args, limit+1)
+	args = append(args, limit+1)
 
-	rows, err := r.db.QueryContext(ctx, dataQuery, dataArgs...)
+	rows, err := r.db.QueryContext(ctx, dataQuery, args...)
 	if err != nil {
 		return nil, nil, nil, false, false, fmt.Errorf("query permissions: %w", err)
 	}
@@ -168,10 +168,6 @@ func (r *permissionRepository) Delete(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("permission not found")
 	}
 	return nil
-}
-
-func mapSqlcPermissionToEntity(row sqlc.Permission) *entity.Permission {
-	return mapPermissionRowToEntity(row.ID, row.Name, row.Description, row.Resource, row.Action, row.CreatedAt, row.UpdatedAt, row.DeletedAt)
 }
 
 func mapPermissionRowToEntity(id uuid.UUID, name, description, resource, action string, createdAt, updatedAt time.Time, deletedAt sql.NullTime) *entity.Permission {

@@ -22,7 +22,7 @@ func ResponseFormatter() func(http.Handler) http.Handler {
 			if isEnvelope(fw.body) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(fw.statusCode)
-				w.Write(fw.body)
+				_, _ = w.Write(fw.body)
 				return
 			}
 
@@ -35,54 +35,54 @@ func ResponseFormatter() func(http.Handler) http.Handler {
 					Message string `json:"message"`
 				}
 				if json.Unmarshal(fw.body, &errBody) == nil && errBody.Message != "" {
-					json.NewEncoder(w).Encode(utils.APIResponse{
+					_ = json.NewEncoder(w).Encode(utils.APIResponse{
 						Success: false,
 						Error:   &utils.ErrorBody{Code: errBody.Code, Message: errBody.Message},
 					})
 					return
 				}
-				json.NewEncoder(w).Encode(utils.APIResponse{
+				_ = json.NewEncoder(w).Encode(utils.APIResponse{
 					Success: false,
 					Error:   &utils.ErrorBody{Code: http.StatusText(fw.statusCode), Message: string(bytes.TrimSpace(fw.body))},
 				})
 				return
 			}
 
-		var paginated struct {
-			Data       interface{} `json:"data"`
-			Pagination interface{} `json:"pagination"`
-		}
-		if json.Unmarshal(fw.body, &paginated) == nil && paginated.Data != nil && paginated.Pagination != nil {
-			var meta utils.PaginationMeta
-			metaBytes, _ := json.Marshal(paginated.Pagination)
-			json.Unmarshal(metaBytes, &meta)
-			json.NewEncoder(w).Encode(utils.APIResponse{
-				Success: true,
-				Data:    paginated.Data,
-				Meta:    &meta,
-			})
-			return
-		}
+			var paginated struct {
+				Data       interface{} `json:"data"`
+				Pagination interface{} `json:"pagination"`
+			}
+			if json.Unmarshal(fw.body, &paginated) == nil && paginated.Data != nil && paginated.Pagination != nil {
+				var meta utils.PaginationMeta
+				metaBytes, _ := json.Marshal(paginated.Pagination)
+				_ = json.Unmarshal(metaBytes, &meta)
+				_ = json.NewEncoder(w).Encode(utils.APIResponse{
+					Success: true,
+					Data:    paginated.Data,
+					Meta:    &meta,
+				})
+				return
+			}
 
-		var cursorResp struct {
-			Data interface{} `json:"data"`
-			Meta interface{} `json:"meta"`
-		}
-		if json.Unmarshal(fw.body, &cursorResp) == nil && cursorResp.Data != nil && cursorResp.Meta != nil {
-			var meta utils.CursorMeta
-			metaBytes, _ := json.Marshal(cursorResp.Meta)
-			json.Unmarshal(metaBytes, &meta)
-			json.NewEncoder(w).Encode(utils.APIResponse{
-				Success: true,
-				Data:    cursorResp.Data,
-				Meta:    &meta,
-			})
-			return
-		}
+			var cursorResp struct {
+				Data interface{} `json:"data"`
+				Meta interface{} `json:"meta"`
+			}
+			if json.Unmarshal(fw.body, &cursorResp) == nil && cursorResp.Data != nil && cursorResp.Meta != nil {
+				var meta utils.CursorMeta
+				metaBytes, _ := json.Marshal(cursorResp.Meta)
+				_ = json.Unmarshal(metaBytes, &meta)
+				_ = json.NewEncoder(w).Encode(utils.APIResponse{
+					Success: true,
+					Data:    cursorResp.Data,
+					Meta:    &meta,
+				})
+				return
+			}
 
 			var raw interface{}
-			json.Unmarshal(fw.body, &raw)
-			json.NewEncoder(w).Encode(utils.APIResponse{
+			_ = json.Unmarshal(fw.body, &raw)
+			_ = json.NewEncoder(w).Encode(utils.APIResponse{
 				Success: true,
 				Data:    raw,
 				Meta:    nil,

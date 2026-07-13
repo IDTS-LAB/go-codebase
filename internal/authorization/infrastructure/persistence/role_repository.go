@@ -88,9 +88,9 @@ func (r *roleRepository) GetAll(ctx context.Context, cursorArg *string, limit in
 	}
 
 	dataQuery := fmt.Sprintf("SELECT id, name, description, created_at, updated_at, deleted_at FROM roles %s ORDER BY created_at DESC, id DESC LIMIT $%d", whereClause, nextPos)
-	dataArgs := append(args, limit+1)
+	args = append(args, limit+1)
 
-	rows, err := r.db.QueryContext(ctx, dataQuery, dataArgs...)
+	rows, err := r.db.QueryContext(ctx, dataQuery, args...)
 	if err != nil {
 		return nil, nil, nil, false, false, fmt.Errorf("query roles: %w", err)
 	}
@@ -164,19 +164,6 @@ func (r *roleRepository) Delete(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("role not found")
 	}
 	return nil
-}
-
-func mapSqlcRoleToEntity(row sqlc.Role) *entity.Role {
-	return &entity.Role{
-		Entity: domain.Entity{
-			ID:        row.ID,
-			CreatedAt: row.CreatedAt,
-			UpdatedAt: row.UpdatedAt,
-			DeletedAt: nullTimeToPtr(row.DeletedAt),
-		},
-		Name:        row.Name,
-		Description: row.Description,
-	}
 }
 
 func mapRoleRowToEntity(id uuid.UUID, name, description string, createdAt, updatedAt time.Time, deletedAt sql.NullTime) *entity.Role {

@@ -23,11 +23,11 @@ import (
 type contextKey string
 
 const (
-	RequestIDKey  contextKey = "request_id"
-	UserIDKey     contextKey = "user_id"
-	UserEmailKey  contextKey = "user_email"
-	UserRoleKey   contextKey = "user_role"
-	TenantIDKey   contextKey = "tenant_id"
+	RequestIDKey   contextKey = "request_id"
+	UserIDKey      contextKey = "user_id"
+	UserEmailKey   contextKey = "user_email"
+	UserRoleKey    contextKey = "user_role"
+	TenantIDKey    contextKey = "tenant_id"
 	TenantClaimKey contextKey = "tenant_claim"
 )
 

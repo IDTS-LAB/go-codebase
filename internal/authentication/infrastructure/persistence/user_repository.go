@@ -67,7 +67,7 @@ func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	var emailVerifiedAt *time.Time
 	if user.EmailVerified {
@@ -207,7 +207,7 @@ func (r *userRepository) Update(ctx context.Context, user *entity.User) error {
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	result, err := tx.ExecContext(ctx, `
 		UPDATE users SET

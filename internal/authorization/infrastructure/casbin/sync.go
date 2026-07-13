@@ -23,9 +23,9 @@ func SyncUserPolicies(ctx context.Context, db *sql.DB, enforcer *casbin.CachedEn
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM casbin_rule WHERE ptype = 'p' AND v0 = $1`, subject); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM casbin_rule WHERE ptype = 'p' AND v0 = $1`, subject); err != nil {
 		return fmt.Errorf("delete existing policies: %w", err)
 	}
 
@@ -36,16 +36,16 @@ func SyncUserPolicies(ctx context.Context, db *sql.DB, enforcer *casbin.CachedEn
 	defer stmt.Close()
 
 	for _, p := range policies {
-		if _, err := stmt.ExecContext(ctx, p[0], p[1], p[2]); err != nil {
+		if _, err = stmt.ExecContext(ctx, p[0], p[1], p[2]); err != nil {
 			return fmt.Errorf("insert policy: %w", err)
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("commit: %w", err)
 	}
 
-	if err := enforcer.LoadPolicy(); err != nil {
+	if err = enforcer.LoadPolicy(); err != nil {
 		return fmt.Errorf("load policy: %w", err)
 	}
 
@@ -62,9 +62,9 @@ func SyncAllPolicies(ctx context.Context, db *sql.DB, enforcer *casbin.CachedEnf
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM casbin_rule WHERE ptype = 'p'`); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM casbin_rule WHERE ptype = 'p'`); err != nil {
 		return fmt.Errorf("delete existing policies: %w", err)
 	}
 
@@ -75,12 +75,12 @@ func SyncAllPolicies(ctx context.Context, db *sql.DB, enforcer *casbin.CachedEnf
 	defer stmt.Close()
 
 	for _, p := range policies {
-		if _, err := stmt.ExecContext(ctx, p[0], p[1], p[2]); err != nil {
+		if _, err = stmt.ExecContext(ctx, p[0], p[1], p[2]); err != nil {
 			return fmt.Errorf("insert policy: %w", err)
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("commit: %w", err)
 	}
 
@@ -106,7 +106,7 @@ func loadUserFlattenedPolicies(ctx context.Context, db *sql.DB, userID uuid.UUID
 	var policies []flattenedPolicy
 	for rows.Next() {
 		var sub, obj, act string
-		if err := rows.Scan(&sub, &obj, &act); err != nil {
+		if err = rows.Scan(&sub, &obj, &act); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		policies = append(policies, flattenedPolicy{sub, obj, act})
@@ -133,7 +133,7 @@ func loadAllFlattenedPolicies(ctx context.Context, db *sql.DB) ([]flattenedPolic
 	var policies []flattenedPolicy
 	for rows.Next() {
 		var sub, obj, act string
-		if err := rows.Scan(&sub, &obj, &act); err != nil {
+		if err = rows.Scan(&sub, &obj, &act); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		policies = append(policies, flattenedPolicy{sub, obj, act})

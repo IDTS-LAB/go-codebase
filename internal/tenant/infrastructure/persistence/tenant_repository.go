@@ -80,9 +80,9 @@ func (r *tenantRepository) List(ctx context.Context, cursorArg *string, limit in
 	}
 
 	query += fmt.Sprintf(" ORDER BY created_at DESC, id DESC LIMIT $%d", nextPos)
-	dataArgs := append(args, limit+1)
+	args = append(args, limit+1)
 
-	rows, err := r.db.QueryContext(ctx, query, dataArgs...)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, nil, nil, false, false, fmt.Errorf("list tenants: %w", err)
 	}

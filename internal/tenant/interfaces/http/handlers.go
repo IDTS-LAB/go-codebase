@@ -94,7 +94,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req dto.UpdateTenantRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondBadRequest(w, "invalid request body")
 		return
 	}

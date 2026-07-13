@@ -145,11 +145,11 @@ func (h *Handler) UpdateTodo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req dto.UpdateTodoRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondBadRequest(w, "invalid request body")
 		return
 	}
-	if err := h.validator.Validate(req); err != nil {
+	if err = h.validator.Validate(req); err != nil {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}

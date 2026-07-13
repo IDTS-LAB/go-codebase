@@ -1,6 +1,6 @@
 package domain
 
-type DomainEvent interface {
+type DomainEvent interface { //nolint:revive
 	EventType() string
 	OccurredAt() interface{}
 }

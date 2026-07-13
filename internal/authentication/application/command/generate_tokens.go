@@ -19,8 +19,8 @@ type TokenPair struct {
 }
 
 type GenerateTokensCommand struct {
-	User       *entity.User
-	TokenTTL   time.Duration
+	User     *entity.User
+	TokenTTL time.Duration
 }
 
 type GenerateTokensHandler struct {
@@ -58,7 +58,7 @@ func (h *GenerateTokensHandler) Handle(ctx context.Context, cmd any) (any, error
 	}
 
 	refreshToken := entity.NewRefreshToken(c.User.ID, refreshTokenStr, time.Now().Add(refreshTokenTTL))
-	if err := h.refreshRepo.Create(ctx, refreshToken); err != nil {
+	if err = h.refreshRepo.Create(ctx, refreshToken); err != nil {
 		return nil, err
 	}
 

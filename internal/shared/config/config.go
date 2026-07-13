@@ -124,10 +124,10 @@ type AsynqConfig struct {
 
 // TenantConfig holds multi-tenancy settings.
 type TenantConfig struct {
-	Enabled       bool   `yaml:"enabled"`
-	TenantHeader  string `yaml:"tenant_header"`
+	Enabled        bool   `yaml:"enabled"`
+	TenantHeader   string `yaml:"tenant_header"`
 	TenantJWTClaim string `yaml:"tenant_jwt_claim"`
-	Domain        string `yaml:"domain"`
+	Domain         string `yaml:"domain"`
 }
 
 // EmailConfig holds email service settings.
@@ -163,9 +163,11 @@ func New() (*Config, error) {
 		fmt.Printf("warning: could not load config.yaml: %v\n", err)
 	}
 
-	k.Load(env.ProviderWithValue("", ".", func(s string, v string) (string, interface{}) {
-		return strings.Replace(strings.ToLower(s), "_", ".", -1), v
-	}), nil)
+	if err := k.Load(env.ProviderWithValue("", ".", func(s string, v string) (string, interface{}) {
+		return strings.ReplaceAll(strings.ToLower(s), "_", "."), v
+	}), nil); err != nil {
+		fmt.Printf("warning: could not load env config: %v\n", err)
+	}
 
 	cfg := &Config{}
 	if err := k.Unmarshal("", cfg); err != nil {

@@ -13,10 +13,10 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/dto"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/query"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/entity"
+	coredomain "github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
-	coredomain "github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -239,10 +239,10 @@ func TestCreatePermission(t *testing.T) {
 
 		permID := uuid.New()
 		expected := &entity.Permission{
-			Entity:      coredomain.Entity{ID: permID},
-			Name:        "read",
-			Resource:    "users",
-			Action:      "read",
+			Entity:   coredomain.Entity{ID: permID},
+			Name:     "read",
+			Resource: "users",
+			Action:   "read",
 		}
 		cmdBus.Register(command.CreatePermissionCommand{}, &mockHandler{result: expected})
 
@@ -357,10 +357,10 @@ func TestUpdatePermission(t *testing.T) {
 
 		permID := uuid.New()
 		updated := &entity.Permission{
-			Entity:      coredomain.Entity{ID: permID},
-			Name:        "write",
-			Resource:    "users",
-			Action:      "write",
+			Entity:   coredomain.Entity{ID: permID},
+			Name:     "write",
+			Resource: "users",
+			Action:   "write",
 		}
 		cmdBus.Register(command.UpdatePermissionCommand{}, &mockHandler{result: updated})
 

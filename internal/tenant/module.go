@@ -2,21 +2,18 @@ package tenant
 
 import (
 	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
-	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
 	"github.com/IDTS-LAB/go-codebase/internal/tenant/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/tenant/application/query"
 	"github.com/IDTS-LAB/go-codebase/internal/tenant/domain/repository"
-	httpHandler "github.com/IDTS-LAB/go-codebase/internal/tenant/interfaces/http"
 	"github.com/IDTS-LAB/go-codebase/internal/tenant/infrastructure/persistence"
+	httpHandler "github.com/IDTS-LAB/go-codebase/internal/tenant/interfaces/http"
 	"go.uber.org/fx"
 )
 
 var Module = fx.Module("tenant",
 	fx.Provide(
 		persistence.NewTenantRepository,
-		func(commandBus cqrs.CommandBus, queryBus cqrs.QueryBus, v *validator.Validator) *httpHandler.Handler {
-			return httpHandler.NewHandler(commandBus, queryBus, v)
-		},
+		httpHandler.NewHandler,
 	),
 
 	fx.Invoke(registerHandlers),

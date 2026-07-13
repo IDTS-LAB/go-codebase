@@ -129,7 +129,7 @@ func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req dto.UpdateRoleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondBadRequest(w, "invalid request body")
 		return
 	}
@@ -265,7 +265,7 @@ func (h *Handler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req dto.UpdatePermissionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondBadRequest(w, "invalid request body")
 		return
 	}
@@ -476,11 +476,11 @@ func (h *Handler) CheckPermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req dto.CheckPermissionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondBadRequest(w, "invalid request body")
 		return
 	}
-	if err := h.validator.Validate(req); err != nil {
+	if err = h.validator.Validate(req); err != nil {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}

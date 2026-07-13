@@ -13,7 +13,7 @@ var (
 	ErrUnauthorized  = errors.New("unauthorized")
 )
 
-type DomainError struct {
+type DomainError struct { //nolint:revive
 	Err     error
 	Code    string
 	Message string

@@ -49,9 +49,9 @@ func (r *userRepository) List(ctx context.Context, cursorArg *string, limit int)
 	}
 
 	dataQuery := fmt.Sprintf("SELECT u.id, u.email, u.name, u.is_active, u.created_at, u.updated_at, u.deleted_at FROM users u %s ORDER BY u.created_at DESC, u.id DESC LIMIT $%d", whereClause, nextPos)
-	dataArgs := append(args, limit+1)
+	args = append(args, limit+1)
 
-	rows, err := r.db.QueryContext(ctx, dataQuery, dataArgs...)
+	rows, err := r.db.QueryContext(ctx, dataQuery, args...)
 	if err != nil {
 		return nil, nil, nil, false, false, fmt.Errorf("list users: %w", err)
 	}

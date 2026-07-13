@@ -44,9 +44,9 @@ func (a *Adapter) SavePolicy(model model.Model) error {
 	if err != nil {
 		return fmt.Errorf("save policy begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.Exec(`DELETE FROM casbin_rule`); err != nil {
+	if _, err = tx.Exec(`DELETE FROM casbin_rule`); err != nil {
 		return fmt.Errorf("save policy delete: %w", err)
 	}
 
@@ -66,7 +66,7 @@ func (a *Adapter) SavePolicy(model model.Model) error {
 			for _, p := range ruleParts {
 				values = append(values, p)
 			}
-			if _, err := stmt.Exec(values...); err != nil {
+			if _, err = stmt.Exec(values...); err != nil {
 				return fmt.Errorf("save policy insert: %w", err)
 			}
 		}
@@ -82,7 +82,7 @@ func (a *Adapter) SavePolicy(model model.Model) error {
 			for _, p := range ruleParts {
 				values = append(values, p)
 			}
-			if _, err := stmt.Exec(values...); err != nil {
+			if _, err = stmt.Exec(values...); err != nil {
 				return fmt.Errorf("save policy insert g: %w", err)
 			}
 		}

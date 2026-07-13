@@ -23,10 +23,10 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/logger"
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/messaging"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/auditlog"
-	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
-	"github.com/IDTS-LAB/go-codebase/internal/shared/events"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/config"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/database"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/events"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/router"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/telemetry"
@@ -43,10 +43,16 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	cfg, err := config.New()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("load config: %w", err)
 	}
 
 	var (
@@ -114,8 +120,7 @@ func main() {
 	defer cancel()
 
 	if err := app.Start(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to start app: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("start app: %w", err)
 	}
 
 	mw := middleware.NewRegistry(tokenSvc, rdb, cfg, log, errorRepo, enforcer)
@@ -150,12 +155,12 @@ func main() {
 	defer shutdownCancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to stop app: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("shutdown server: %w", err)
 	}
 
-	if err := app.Stop(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to stop app: %v\n", err)
-		os.Exit(1)
+	if err := app.Stop(context.Background()); err != nil {
+		return fmt.Errorf("stop app: %w", err)
 	}
+
+	return nil
 }

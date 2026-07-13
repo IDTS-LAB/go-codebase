@@ -7,8 +7,8 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/repository"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/infrastructure/casbin"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/infrastructure/persistence"
-	"github.com/IDTS-LAB/go-codebase/internal/authorization/public"
 	httpHandler "github.com/IDTS-LAB/go-codebase/internal/authorization/interfaces/http"
+	"github.com/IDTS-LAB/go-codebase/internal/authorization/public"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"go.uber.org/fx"
 )

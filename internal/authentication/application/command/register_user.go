@@ -43,7 +43,7 @@ func (h *RegisterUserHandler) Handle(ctx context.Context, cmd any) (any, error) 
 	}
 
 	user := entity.NewUser(c.Email, string(hashedPassword), c.Name)
-	if err := h.userRepo.Create(ctx, user); err != nil {
+	if err = h.userRepo.Create(ctx, user); err != nil {
 		return nil, err
 	}
 
@@ -55,7 +55,7 @@ func (h *RegisterUserHandler) Handle(ctx context.Context, cmd any) (any, error) 
 	hashed := hashToken(token)
 	user.EmailVerifyToken = &hashed
 	user.EmailVerifyExpires = &expires
-	if err := h.userRepo.Update(ctx, user); err != nil {
+	if err = h.userRepo.Update(ctx, user); err != nil {
 		return nil, err
 	}
 

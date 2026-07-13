@@ -12,11 +12,11 @@ import (
 var IsProduction bool
 
 type APIResponse struct {
-	Success bool            `json:"success"`
-	Data    interface{}     `json:"data,omitempty"`
-	Meta    interface{}     `json:"meta,omitempty"`
-	Error   *ErrorBody      `json:"error,omitempty"`
-	Stack   string          `json:"stack,omitempty"`
+	Success bool        `json:"success"`
+	Data    interface{} `json:"data,omitempty"`
+	Meta    interface{} `json:"meta,omitempty"`
+	Error   *ErrorBody  `json:"error,omitempty"`
+	Stack   string      `json:"stack,omitempty"`
 }
 
 type PaginationMeta struct {
@@ -54,7 +54,7 @@ type PaginatedResult[T any] struct {
 func RespondJSON(w http.ResponseWriter, status int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(payload)
+	_ = json.NewEncoder(w).Encode(payload)
 }
 
 func RespondSuccess(w http.ResponseWriter, data interface{}) {

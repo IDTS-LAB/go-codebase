@@ -60,7 +60,7 @@ func TestAdaptNoContent_ReturnsSuccessWithNilData(t *testing.T) {
 }
 
 func TestAdaptPaginated_ReturnsPaginationMeta(t *testing.T) {
-	handler := AdaptPaginated(func(ctx context.Context, r *http.Request) (utils.PaginatedResult[map[string]string], error) {
+	handler := AdaptPaginated[map[string]string](func(ctx context.Context, r *http.Request) (utils.PaginatedResult[map[string]string], error) {
 		return utils.PaginatedResult[map[string]string]{
 			Data:    []map[string]string{{"id": "1"}},
 			Page:    1,
