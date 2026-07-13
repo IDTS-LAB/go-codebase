@@ -15,9 +15,11 @@ linters:
     - gocritic
     - revive
     - misspell
-    - shadow
 
 linters-settings:
+  govet:
+    enable:
+      - shadow
   revive:
     rules:
       - name: exported
