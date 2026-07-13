@@ -11,7 +11,7 @@ on:
       - development
 
 env:
-  GO_VERSION: "1.22"
+  GO_VERSION: "1.25"
 
 jobs:
   lint:
@@ -25,6 +25,24 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Generate code
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+          go install github.com/swaggo/swag/cmd/swag@latest
+          make sqlc
+          make swagger
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
@@ -78,6 +96,13 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
+      - name: Generate code
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+          go install github.com/swaggo/swag/cmd/swag@latest
+          make sqlc
+          make swagger
+
       - name: Run tests
         env:
           DB_HOST: localhost
@@ -113,6 +138,13 @@ jobs:
 
       - name: Download dependencies
         run: go mod download
+
+      - name: Generate code
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+          go install github.com/swaggo/swag/cmd/swag@latest
+          make sqlc
+          make swagger
 
       - name: Build binary
         run: go build -o bin/server ./cmd/api
