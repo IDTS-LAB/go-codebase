@@ -1,0 +1,41 @@
+{
+  "title": "PostgreSQL",
+  "uid": "postgresql",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "panels": [
+    {
+      "title": "Active Connections",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+      "targets": [{"expr": "pg_stat_database_numbackends", "legendFormat": "connections"}],
+      "lines": true,
+      "fill": 1
+    },
+    {
+      "title": "Transactions Per Second",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+      "targets": [{"expr": "rate(pg_stat_database_xact_commit[5m]) + rate(pg_stat_database_xact_rollback[5m])", "legendFormat": "tps"}],
+      "lines": true,
+      "fill": 1
+    },
+    {
+      "title": "Cache Hit Ratio",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+      "targets": [{"expr": "rate(pg_stat_database_blks_hit[5m]) / (rate(pg_stat_database_blks_hit[5m]) + rate(pg_stat_database_blks_read[5m])) * 100", "legendFormat": "hit %"}],
+      "lines": true,
+      "fill": 1
+    },
+    {
+      "title": "Deadlocks",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+      "targets": [{"expr": "rate(pg_stat_database_deadlocks[5m])", "legendFormat": "deadlocks"}],
+      "lines": true,
+      "fill": 1
+    }
+  ]
+}

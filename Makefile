@@ -1,4 +1,4 @@
-.PHONY: run build test lint fmt migrate-up migrate-down sqlc swagger docker-up docker-down clean rename install-tools precommit install-hooks
+.PHONY: run build test lint fmt migrate-up migrate-down sqlc swagger docker-up docker-down docker-dev docker-dev-down clean rename install-tools precommit install-hooks
 
 APP_NAME := go-codebase
 BUILD_DIR := bin
@@ -97,6 +97,12 @@ docker-prod-down:
 
 docker-prod-migrate:
 	docker compose -f docker-compose.prod.yml --profile migrate run --rm migrate
+
+docker-dev:
+	docker compose -f docker-compose.dev.yml up -d
+
+docker-dev-down:
+	docker compose -f docker-compose.dev.yml down
 
 clean:
 	rm -rf $(BUILD_DIR) coverage.out coverage.html

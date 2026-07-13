@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
+	coredomain "github.com/IDTS-LAB/go-codebase/internal/core/domain"
+	monitoringdomain "github.com/IDTS-LAB/go-codebase/internal/monitoring/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/auditlog"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/config"
 	"github.com/redis/go-redis/v9"
@@ -21,16 +22,18 @@ type Registry struct {
 	Idempotency   func(http.Handler) http.Handler
 	MaxBodySize   func(http.Handler) http.Handler
 	Tracing       func(http.Handler) http.Handler
+	Metrics       func(http.Handler) http.Handler
 	Authorizer    Authorizer
 }
 
 func NewRegistry(
-	tokenSvc domain.TokenService,
+	tokenSvc coredomain.TokenService,
 	rdb *redis.Client,
 	cfg *config.Config,
-	log domain.Logger,
+	log coredomain.Logger,
 	errorRepo *auditlog.Repository,
 	authorizer Authorizer,
+	metricsRecorder monitoringdomain.MetricsRecorder,
 ) Registry {
 	auth := Authentication(tokenSvc)
 	if cfg.Auth.TokenDenylist {
@@ -49,6 +52,7 @@ func NewRegistry(
 		Idempotency:   Idempotency(rdb, time.Duration(cfg.Idempotency.TTL)*time.Second),
 		MaxBodySize:   MaxBodySize(int64(cfg.Server.MaxRequestBodySize)),
 		Tracing:       Tracing(),
+		Metrics:       Metrics(metricsRecorder),
 		Authorizer:    authorizer,
 	}
 }

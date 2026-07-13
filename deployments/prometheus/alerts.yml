@@ -1,0 +1,48 @@
+groups:
+  - name: go-codebase
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High HTTP 5xx error rate"
+          description: "Error rate is {{ $value | humanizePercentage }} for the last 5 minutes."
+
+      - alert: HighLatency
+        expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High p99 latency"
+          description: "p99 latency is {{ $value }}s for the last 5 minutes."
+
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.instance }} is down"
+          description: "{{ $labels.job }} ({{ $labels.instance }}) has been unreachable for 1 minute."
+
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes > 500 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Go process RSS is {{ $value | humanizeBytes }}."
+
+      - alert: DatabaseConnectionPoolExhaustion
+        expr: pg_stat_database_numbackends > 40
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database connection pool near limit"
+          description: "Active connections: {{ $value }}"

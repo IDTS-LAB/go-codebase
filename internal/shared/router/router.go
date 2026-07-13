@@ -2,6 +2,7 @@ package router
 
 import (
 	"database/sql"
+	"net/http"
 
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/config"
@@ -13,11 +14,12 @@ import (
 const APIPrefix = "/api/v1"
 
 type Handlers struct {
-	Auth   *chi.Mux
-	Todo   *chi.Mux
-	Authz  *chi.Mux
-	User   *chi.Mux
-	Tenant *chi.Mux
+	Auth           *chi.Mux
+	Todo           *chi.Mux
+	Authz          *chi.Mux
+	User           *chi.Mux
+	Tenant         *chi.Mux
+	MetricsHandler http.Handler
 }
 
 func NewRouter(h Handlers, mw middleware.Registry, log domain.Logger, cfg *config.Config, db *sql.DB) *chi.Mux {
@@ -33,9 +35,14 @@ func NewRouter(h Handlers, mw middleware.Registry, log domain.Logger, cfg *confi
 	r.Use(mw.ErrorRecorder)
 	r.Use(mw.AuditLog)
 	r.Use(mw.RateLimit)
+	r.Use(mw.Metrics)
 	r.Use(middleware.Logger(log))
 
 	registerWeb(r, cfg, db)
+
+	if h.MetricsHandler != nil {
+		r.Handle("/metrics", h.MetricsHandler)
+	}
 
 	r.Route(APIPrefix, func(r chi.Router) {
 		r.Use(middleware.ResponseFormatter())

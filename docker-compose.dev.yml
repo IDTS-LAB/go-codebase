@@ -1,60 +1,10 @@
 version: "3.8"
 
+# Development infrastructure only — runs API and PostgreSQL locally.
+# Start with: docker compose -f docker-compose.dev.yml up -d
+# Then run:   make run
+
 services:
-  api:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_NAME=go_codebase
-      - REDIS_ADDR=redis:6379
-      - NATS_URL=nats://nats:4222
-      - JWT_SECRET=your-secret-key-change-in-production
-      - OTEL_EXPORTER_ENDPOINT=http://jaeger:4318
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      nats:
-        condition: service_started
-    networks:
-      - app-network
-
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: go_codebase
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - app-network
-
-  postgres_exporter:
-    image: prometheuscommunity/postgres-exporter:latest
-    ports:
-      - "9187:9187"
-    environment:
-      DATA_SOURCE_NAME: "postgresql://postgres:postgres@postgres:5432/go_codebase?sslmode=disable"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - app-network
-
   redis:
     image: redis:7-alpine
     ports:
@@ -67,7 +17,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - app-network
+      - dev-network
 
   redis_exporter:
     image: oliver006/redis_exporter:latest
@@ -79,7 +29,18 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - app-network
+      - dev-network
+
+  postgres_exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    ports:
+      - "9187:9187"
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:postgres@host.docker.internal:5432/go_codebase?sslmode=disable"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - dev-network
 
   nats:
     image: nats:2-alpine
@@ -88,7 +49,7 @@ services:
       - "8222:8222"
     command: ["--http_port", "8222"]
     networks:
-      - app-network
+      - dev-network
 
   jaeger:
     image: jaegertracing/all-in-one:latest
@@ -98,16 +59,19 @@ services:
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     networks:
-      - app-network
+      - dev-network
 
   prometheus:
     image: prom/prometheus:v2.51.0
     ports:
       - "9090:9090"
     volumes:
-      - ./deployments/prometheus:/etc/prometheus
+      - ./deployments/prometheus/prometheus.dev.yml:/etc/prometheus/prometheus.yml
+      - ./deployments/prometheus/alerts.yml:/etc/prometheus/alerts.yml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
-      - app-network
+      - dev-network
 
   alertmanager:
     image: prom/alertmanager:v0.27.0
@@ -126,7 +90,7 @@ services:
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
       - ALERT_EMAIL_TO=${ALERT_EMAIL_TO:-admin@example.com}
     networks:
-      - app-network
+      - dev-network
 
   grafana:
     image: grafana/grafana:10.4.0
@@ -141,13 +105,12 @@ services:
     depends_on:
       - prometheus
     networks:
-      - app-network
+      - dev-network
 
 volumes:
-  postgres_data:
   redis_data:
   grafana_data:
 
 networks:
-  app-network:
+  dev-network:
     driver: bridge

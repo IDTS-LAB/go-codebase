@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/joho/godotenv"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
@@ -155,8 +154,6 @@ type SendGridConfig struct {
 }
 
 func New() (*Config, error) {
-	_ = godotenv.Load()
-
 	k := koanf.New(".")
 
 	if err := k.Load(file.Provider("configs/config.yaml"), yaml.Parser()); err != nil {
