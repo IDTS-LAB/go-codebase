@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/tenantfilter"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/entity"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/repository"
+	"github.com/IDTS-LAB/go-codebase/internal/todo/infrastructure/persistence/sqlc"
 	"github.com/google/uuid"
 )
 
@@ -22,10 +24,15 @@ func NewTodoRepository(db *sql.DB, tenantConfig *tenantfilter.Config) repository
 }
 
 func (r *todoRepository) Create(ctx context.Context, todo *entity.Todo) error {
-	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO todos (id, title, description, completed, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, todo.ID, todo.Title, todo.Description, todo.Completed, todo.CreatedAt, todo.UpdatedAt)
+	q := sqlc.New(r.db)
+	err := q.CreateTodo(ctx, sqlc.CreateTodoParams{
+		ID:          todo.ID,
+		Title:       todo.Title,
+		Description: todo.Description,
+		Completed:   todo.Completed,
+		CreatedAt:   todo.CreatedAt,
+		UpdatedAt:   todo.UpdatedAt,
+	})
 	if err != nil {
 		return fmt.Errorf("insert todo: %w", err)
 	}
@@ -33,22 +40,24 @@ func (r *todoRepository) Create(ctx context.Context, todo *entity.Todo) error {
 }
 
 func (r *todoRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Todo, error) {
-	var t entity.Todo
-	var deletedAt sql.NullTime
-	err := r.db.QueryRowContext(ctx, `
-		SELECT id, title, description, completed, created_at, updated_at, deleted_at
-		FROM todos WHERE id = $1 AND deleted_at IS NULL
-	`, id).Scan(&t.ID, &t.Title, &t.Description, &t.Completed, &t.CreatedAt, &t.UpdatedAt, &deletedAt)
+	q := sqlc.New(r.db)
+	row, err := q.GetTodoByID(ctx, id)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("todo not found")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get todo: %w", err)
 	}
-	if deletedAt.Valid {
-		t.DeletedAt = &deletedAt.Time
+	todo := &entity.Todo{
+		Entity:      domain.Entity{ID: row.ID, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt},
+		Title:       row.Title,
+		Description: row.Description,
+		Completed:   row.Completed,
 	}
-	return &t, nil
+	if row.DeletedAt.Valid {
+		todo.DeletedAt = &row.DeletedAt.Time
+	}
+	return todo, nil
 }
 
 func (r *todoRepository) GetAll(ctx context.Context, offset, limit int) ([]*entity.Todo, int, error) {
@@ -110,15 +119,16 @@ func (r *todoRepository) GetAll(ctx context.Context, offset, limit int) ([]*enti
 }
 
 func (r *todoRepository) Update(ctx context.Context, todo *entity.Todo) error {
-	result, err := r.db.ExecContext(ctx, `
-		UPDATE todos SET title = $2, description = $3, completed = $4, updated_at = $5 WHERE id = $1 AND deleted_at IS NULL
-	`, todo.ID, todo.Title, todo.Description, todo.Completed, todo.UpdatedAt)
+	q := sqlc.New(r.db)
+	rows, err := q.UpdateTodo(ctx, sqlc.UpdateTodoParams{
+		ID:          todo.ID,
+		Title:       todo.Title,
+		Description: todo.Description,
+		Completed:   todo.Completed,
+		UpdatedAt:   todo.UpdatedAt,
+	})
 	if err != nil {
 		return fmt.Errorf("update todo: %w", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("update todo rows: %w", err)
 	}
 	if rows == 0 {
 		return fmt.Errorf("todo not found")
@@ -127,15 +137,10 @@ func (r *todoRepository) Update(ctx context.Context, todo *entity.Todo) error {
 }
 
 func (r *todoRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	result, err := r.db.ExecContext(ctx, `
-		UPDATE todos SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL
-	`, id)
+	q := sqlc.New(r.db)
+	rows, err := q.SoftDeleteTodo(ctx, id)
 	if err != nil {
 		return fmt.Errorf("delete todo: %w", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("delete todo rows: %w", err)
 	}
 	if rows == 0 {
 		return fmt.Errorf("todo not found")
