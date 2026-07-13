@@ -4,11 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/entity"
+	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/tenantfilter"
 	"github.com/IDTS-LAB/go-codebase/internal/user/domain/repository"
+	"github.com/IDTS-LAB/go-codebase/internal/user/infrastructure/persistence/sqlc"
 	"github.com/google/uuid"
 )
 
@@ -80,34 +83,37 @@ func (r *userRepository) List(ctx context.Context, offset, limit int) ([]*entity
 }
 
 func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.User, error) {
-	var u entity.User
-	var deletedAt sql.NullTime
-	err := r.db.QueryRowContext(ctx, `
-		SELECT u.id, u.email, u.name, u.is_active, u.created_at, u.updated_at, u.deleted_at
-		FROM users u WHERE u.id = $1 AND u.deleted_at IS NULL
-	`, id).Scan(&u.ID, &u.Email, &u.Name, &u.IsActive, &u.CreatedAt, &u.UpdatedAt, &deletedAt)
+	q := sqlc.New(r.db)
+	row, err := q.GetUserByID(ctx, id)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("user not found")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get user: %w", err)
 	}
-	if deletedAt.Valid {
-		u.DeletedAt = &deletedAt.Time
+	u := &entity.User{
+		Entity:   domain.Entity{ID: row.ID, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt},
+		Email:    row.Email,
+		Name:     row.Name,
+		IsActive: row.IsActive,
 	}
-	return &u, nil
+	if row.DeletedAt.Valid {
+		u.DeletedAt = &row.DeletedAt.Time
+	}
+	return u, nil
 }
 
 func (r *userRepository) Update(ctx context.Context, user *entity.User) error {
-	result, err := r.db.ExecContext(ctx, `
-		UPDATE users SET email = $2, name = $3, is_active = $4, updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL
-	`, user.ID, user.Email, user.Name, user.IsActive)
+	q := sqlc.New(r.db)
+	rows, err := q.UpdateUser(ctx, sqlc.UpdateUserParams{
+		ID:        user.ID,
+		Email:     user.Email,
+		Name:      user.Name,
+		IsActive:  user.IsActive,
+		UpdatedAt: time.Now().UTC(),
+	})
 	if err != nil {
 		return fmt.Errorf("update user: %w", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("update user rows: %w", err)
 	}
 	if rows == 0 {
 		return fmt.Errorf("user not found")
@@ -116,15 +122,10 @@ func (r *userRepository) Update(ctx context.Context, user *entity.User) error {
 }
 
 func (r *userRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	result, err := r.db.ExecContext(ctx, `
-		UPDATE users SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL
-	`, id)
+	q := sqlc.New(r.db)
+	rows, err := q.DeleteUser(ctx, id)
 	if err != nil {
 		return fmt.Errorf("delete user: %w", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("delete user rows: %w", err)
 	}
 	if rows == 0 {
 		return fmt.Errorf("user not found")
