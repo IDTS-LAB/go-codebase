@@ -26,6 +26,25 @@ The server starts at `http://localhost:8080`.
 - **Swagger UI**: `http://localhost:8080/swagger/index.html`
 - **Health check**: `http://localhost:8080/health`
 
+## Development
+
+```bash
+# Install missing tools (golangci-lint, goimports, goose, sqlc, swag)
+make install-tools
+
+# Run all checks before committing
+make precommit
+
+# Install git pre-commit hook (runs make precommit automatically)
+make install-hooks
+
+# Lint
+make lint
+
+# Format code
+make fmt
+```
+
 ## Tech Stack
 
 | Component | Technology |
