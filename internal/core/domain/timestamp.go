@@ -50,7 +50,7 @@ func (t Timestamp) MarshalText() ([]byte, error) {
 	return []byte(t.value.Format(time.RFC3339)), nil
 }
 
-func (t Timestamp) UnmarshalText(data []byte) error {
+func (t *Timestamp) UnmarshalText(data []byte) error {
 	parsed, err := time.Parse(time.RFC3339, string(data))
 	if err != nil {
 		return fmt.Errorf("parse timestamp: %w", err)
@@ -63,7 +63,7 @@ func (t Timestamp) Value() (driver.Value, error) {
 	return t.value, nil
 }
 
-func (t Timestamp) Scan(src interface{}) error {
+func (t *Timestamp) Scan(src interface{}) error {
 	switch v := src.(type) {
 	case time.Time:
 		t.value = v

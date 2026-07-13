@@ -2,25 +2,29 @@ package http
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
+	"strconv"
 
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
-	appService "github.com/IDTS-LAB/go-codebase/internal/todo/application/service"
+	"github.com/IDTS-LAB/go-codebase/internal/todo/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/application/dto"
+	"github.com/IDTS-LAB/go-codebase/internal/todo/application/query"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 type Handler struct {
-	appService *appService.TodoAppService
+	commandBus cqrs.CommandBus
+	queryBus   cqrs.QueryBus
 	validator  *validator.Validator
 }
 
-func NewHandler(appService *appService.TodoAppService, v *validator.Validator) *Handler {
-	return &Handler{appService: appService, validator: v}
+func NewHandler(commandBus cqrs.CommandBus, queryBus cqrs.QueryBus, v *validator.Validator) *Handler {
+	return &Handler{commandBus: commandBus, queryBus: queryBus, validator: v}
 }
 
 // CreateTodo godoc
@@ -30,9 +34,9 @@ func NewHandler(appService *appService.TodoAppService, v *validator.Validator) *
 // @Accept json
 // @Produce json
 // @Param request body dto.CreateTodoRequest true "Todo to create"
-// @Success 201 {object} utils.SuccessResponse{data=dto.TodoResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 500 {object} utils.ErrorResponse
+// @Success 201 {object} utils.APIResponse{data=dto.TodoResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /todos [post]
 func (h *Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
@@ -45,17 +49,17 @@ func (h *Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	resp, err := h.appService.CreateTodo(r.Context(), req)
+	resp, err := h.commandBus.Dispatch(r.Context(), command.CreateTodoCommand{
+		Title:       req.Title,
+		Description: req.Description,
+	})
 	if err != nil {
-		switch err {
-		case service.ErrInvalidTitle:
+		if errors.Is(err, service.ErrInvalidTitle) {
 			utils.RespondBadRequest(w, err.Error())
-		default:
-			utils.RespondInternalError(w, "failed to create todo")
+			return
 		}
-		return
 	}
-	utils.RespondCreated(w, resp)
+	utils.HandleCreated(w, resp, err)
 }
 
 // ListTodos godoc
@@ -65,28 +69,31 @@ func (h *Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param page query int false "Page number" default(1)
 // @Param per_page query int false "Items per page" default(20)
-// @Success 200 {object} utils.SuccessResponse{data=dto.TodoListResponse}
-// @Failure 500 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.TodoListResponse}
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /todos [get]
 func (h *Handler) ListTodos(w http.ResponseWriter, r *http.Request) {
-	page := 1
-	perPage := 20
-	if p := r.URL.Query().Get("page"); p != "" {
-		fmt.Sscanf(p, "%d", &page)
+	cursorStr := r.URL.Query().Get("cursor")
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
 	}
-	if pp := r.URL.Query().Get("per_page"); pp != "" {
-		fmt.Sscanf(pp, "%d", &perPage)
+
+	var cursor *string
+	if cursorStr != "" {
+		cursor = &cursorStr
 	}
-	if perPage > 100 {
-		perPage = 100
-	}
-	resp, err := h.appService.ListTodos(r.Context(), page, perPage)
+
+	resp, err := h.queryBus.Ask(r.Context(), query.ListTodosQuery{Cursor: cursor, Limit: limit})
 	if err != nil {
-		utils.RespondInternalError(w, "failed to list todos")
+		utils.MapErrorFromRequest(w, r, err)
 		return
 	}
-	utils.RespondSuccess(w, resp)
+	result := resp.(query.ListTodosResult)
+	utils.RespondCursorPaginated(w, result.Todos, result.NextCursor, result.PrevCursor, result.HasNext, result.HasPrev, result.Limit)
 }
 
 // GetTodo godoc
@@ -95,9 +102,9 @@ func (h *Handler) ListTodos(w http.ResponseWriter, r *http.Request) {
 // @Tags todos
 // @Produce json
 // @Param id path string true "Todo ID"
-// @Success 200 {object} utils.SuccessResponse{data=dto.TodoResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.TodoResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /todos/{id} [get]
 func (h *Handler) GetTodo(w http.ResponseWriter, r *http.Request) {
@@ -106,14 +113,13 @@ func (h *Handler) GetTodo(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid todo ID")
 		return
 	}
-	resp, err := h.appService.GetTodo(r.Context(), id)
+	resp, err := h.queryBus.Ask(r.Context(), query.GetTodoQuery{ID: id})
 	if err != nil {
-		switch err {
-		case service.ErrTodoNotFound:
+		if errors.Is(err, service.ErrTodoNotFound) {
 			utils.RespondNotFound(w, "todo not found")
-		default:
-			utils.RespondInternalError(w, "failed to get todo")
+			return
 		}
+		utils.Handle(w, nil, err)
 		return
 	}
 	utils.RespondSuccess(w, resp)
@@ -127,9 +133,9 @@ func (h *Handler) GetTodo(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param id path string true "Todo ID"
 // @Param request body dto.UpdateTodoRequest true "Fields to update"
-// @Success 200 {object} utils.SuccessResponse{data=dto.TodoResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.TodoResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /todos/{id} [put]
 func (h *Handler) UpdateTodo(w http.ResponseWriter, r *http.Request) {
@@ -139,22 +145,25 @@ func (h *Handler) UpdateTodo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req dto.UpdateTodoRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondBadRequest(w, "invalid request body")
 		return
 	}
-	if err := h.validator.Validate(req); err != nil {
+	if err = h.validator.Validate(req); err != nil {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	resp, err := h.appService.UpdateTodo(r.Context(), id, req)
+	resp, err := h.commandBus.Dispatch(r.Context(), command.UpdateTodoCommand{
+		ID:          id,
+		Title:       req.Title,
+		Description: req.Description,
+	})
 	if err != nil {
-		switch err {
-		case service.ErrTodoNotFound:
+		if errors.Is(err, service.ErrTodoNotFound) {
 			utils.RespondNotFound(w, "todo not found")
-		default:
-			utils.RespondInternalError(w, "failed to update todo")
+			return
 		}
+		utils.Handle(w, nil, err)
 		return
 	}
 	utils.RespondSuccess(w, resp)
@@ -165,9 +174,9 @@ func (h *Handler) UpdateTodo(w http.ResponseWriter, r *http.Request) {
 // @Description Delete a todo item by ID
 // @Tags todos
 // @Param id path string true "Todo ID"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /todos/{id} [delete]
 func (h *Handler) DeleteTodo(w http.ResponseWriter, r *http.Request) {
@@ -176,16 +185,16 @@ func (h *Handler) DeleteTodo(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid todo ID")
 		return
 	}
-	if err := h.appService.DeleteTodo(r.Context(), id); err != nil {
-		switch err {
-		case service.ErrTodoNotFound:
+	_, err = h.commandBus.Dispatch(r.Context(), command.DeleteTodoCommand{ID: id})
+	if err != nil {
+		if errors.Is(err, service.ErrTodoNotFound) {
 			utils.RespondNotFound(w, "todo not found")
-		default:
-			utils.RespondInternalError(w, "failed to delete todo")
+			return
 		}
+		utils.Handle(w, nil, err)
 		return
 	}
-	utils.RespondSuccess(w, nil)
+	utils.RespondSuccess(w, map[string]string{"message": "todo deleted"})
 }
 
 // CompleteTodo godoc
@@ -193,10 +202,10 @@ func (h *Handler) DeleteTodo(w http.ResponseWriter, r *http.Request) {
 // @Description Mark a todo item as completed
 // @Tags todos
 // @Param id path string true "Todo ID"
-// @Success 200 {object} utils.SuccessResponse{data=dto.TodoResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
-// @Failure 409 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.TodoResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
+// @Failure 409 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /todos/{id}/complete [patch]
 func (h *Handler) CompleteTodo(w http.ResponseWriter, r *http.Request) {
@@ -205,15 +214,15 @@ func (h *Handler) CompleteTodo(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid todo ID")
 		return
 	}
-	resp, err := h.appService.CompleteTodo(r.Context(), id)
+	resp, err := h.commandBus.Dispatch(r.Context(), command.CompleteTodoCommand{ID: id})
 	if err != nil {
-		switch err {
-		case service.ErrTodoNotFound:
+		switch {
+		case errors.Is(err, service.ErrTodoNotFound):
 			utils.RespondNotFound(w, "todo not found")
-		case service.ErrTodoAlreadyDone:
+		case errors.Is(err, service.ErrTodoAlreadyDone):
 			utils.RespondConflict(w, "todo is already completed")
 		default:
-			utils.RespondInternalError(w, "failed to complete todo")
+			utils.MapErrorFromRequest(w, r, err)
 		}
 		return
 	}
@@ -228,9 +237,9 @@ func (h *Handler) CompleteTodo(w http.ResponseWriter, r *http.Request) {
 // @Param q query string true "Search query"
 // @Param page query int false "Page number" default(1)
 // @Param per_page query int false "Items per page" default(20)
-// @Success 200 {object} utils.SuccessResponse{data=dto.TodoListResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 500 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.TodoListResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /todos/search [get]
 func (h *Handler) SearchTodos(w http.ResponseWriter, r *http.Request) {
@@ -239,18 +248,24 @@ func (h *Handler) SearchTodos(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "search query is required")
 		return
 	}
-	page := 1
-	perPage := 20
-	if p := r.URL.Query().Get("page"); p != "" {
-		fmt.Sscanf(p, "%d", &page)
+	cursorStr := r.URL.Query().Get("cursor")
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
 	}
-	if pp := r.URL.Query().Get("per_page"); pp != "" {
-		fmt.Sscanf(pp, "%d", &perPage)
+
+	var cursor *string
+	if cursorStr != "" {
+		cursor = &cursorStr
 	}
-	resp, err := h.appService.SearchTodos(r.Context(), queryStr, page, perPage)
+
+	resp, err := h.queryBus.Ask(r.Context(), query.SearchTodosQuery{Query: queryStr, Cursor: cursor, Limit: limit})
 	if err != nil {
-		utils.RespondInternalError(w, "failed to search todos")
+		utils.MapErrorFromRequest(w, r, err)
 		return
 	}
-	utils.RespondSuccess(w, resp)
+	result := resp.(query.SearchTodosResult)
+	utils.RespondCursorPaginated(w, result.Todos, result.NextCursor, result.PrevCursor, result.HasNext, result.HasPrev, result.Limit)
 }

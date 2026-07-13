@@ -8,11 +8,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/events"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/application/dto"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/application/query"
-	appService "github.com/IDTS-LAB/go-codebase/internal/todo/application/service"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/entity"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/service"
 	httpHandler "github.com/IDTS-LAB/go-codebase/internal/todo/interfaces/http"
@@ -39,9 +40,9 @@ func (m *MockTodoRepo) GetByID(ctx context.Context, id uuid.UUID) (*entity.Todo,
 	return args.Get(0).(*entity.Todo), args.Error(1)
 }
 
-func (m *MockTodoRepo) GetAll(ctx context.Context, offset, limit int) ([]*entity.Todo, int, error) {
-	args := m.Called(ctx, offset, limit)
-	return args.Get(0).([]*entity.Todo), args.Int(1), args.Error(2)
+func (m *MockTodoRepo) GetAll(ctx context.Context, cursor *string, limit int) ([]*entity.Todo, *string, *string, bool, bool, error) {
+	args := m.Called(ctx, cursor, limit)
+	return args.Get(0).([]*entity.Todo), nil, nil, false, false, args.Error(1)
 }
 
 func (m *MockTodoRepo) Update(ctx context.Context, todo *entity.Todo) error {
@@ -54,27 +55,31 @@ func (m *MockTodoRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	return args.Error(0)
 }
 
-func (m *MockTodoRepo) Search(ctx context.Context, queryStr string, offset, limit int) ([]*entity.Todo, int, error) {
-	args := m.Called(ctx, queryStr, offset, limit)
-	return args.Get(0).([]*entity.Todo), args.Int(1), args.Error(2)
+func (m *MockTodoRepo) Search(ctx context.Context, queryStr string, cursor *string, limit int) ([]*entity.Todo, *string, *string, bool, bool, error) {
+	args := m.Called(ctx, queryStr, cursor, limit)
+	return args.Get(0).([]*entity.Todo), nil, nil, false, false, args.Error(1)
 }
 
 func setupHandler(t *testing.T) (*httpHandler.Handler, *MockTodoRepo) {
 	t.Helper()
 	repo := new(MockTodoRepo)
 	domainSvc := service.NewTodoDomainService(repo)
+	eventBus := events.NewInMemoryEventBus()
 
-	createH := command.NewCreateTodoHandler(domainSvc)
-	updateH := command.NewUpdateTodoHandler(domainSvc)
-	deleteH := command.NewDeleteTodoHandler(domainSvc)
-	completeH := command.NewCompleteTodoHandler(domainSvc)
-	getH := query.NewGetTodoHandler(domainSvc)
-	listH := query.NewListTodosHandler(domainSvc)
-	searchH := query.NewSearchTodosHandler(domainSvc)
+	cmdBus := cqrs.NewInMemoryCommandBus()
+	qBus := cqrs.NewInMemoryQueryBus()
 
-	appSvc := appService.NewTodoAppService(createH, updateH, deleteH, completeH, getH, listH, searchH)
+	cmdBus.Register(command.CreateTodoCommand{}, command.NewCreateTodoHandler(domainSvc, eventBus))
+	cmdBus.Register(command.UpdateTodoCommand{}, command.NewUpdateTodoHandler(domainSvc, eventBus))
+	cmdBus.Register(command.DeleteTodoCommand{}, command.NewDeleteTodoHandler(domainSvc, eventBus))
+	cmdBus.Register(command.CompleteTodoCommand{}, command.NewCompleteTodoHandler(domainSvc, eventBus))
+
+	qBus.Register(query.GetTodoQuery{}, query.NewGetTodoHandler(domainSvc))
+	qBus.Register(query.ListTodosQuery{}, query.NewListTodosHandler(domainSvc))
+	qBus.Register(query.SearchTodosQuery{}, query.NewSearchTodosHandler(domainSvc))
+
 	v := validator.New()
-	h := httpHandler.NewHandler(appSvc, v)
+	h := httpHandler.NewHandler(cmdBus, qBus, v)
 	return h, repo
 }
 
@@ -102,6 +107,8 @@ func TestCreateTodo_Success(t *testing.T) {
 	var resp map[string]interface{}
 	json.NewDecoder(rr.Body).Decode(&resp)
 	assert.True(t, resp["success"].(bool))
+	assert.NotNil(t, resp["data"])
+	assert.Nil(t, resp["meta"])
 	repo.AssertExpectations(t)
 }
 
@@ -116,6 +123,11 @@ func TestCreateTodo_ValidationError(t *testing.T) {
 	h.CreateTodo(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	assert.Equal(t, "VALIDATION_ERROR", resp["error"].(map[string]interface{})["code"])
 }
 
 func TestGetTodo_Success(t *testing.T) {
@@ -132,6 +144,11 @@ func TestGetTodo_Success(t *testing.T) {
 	h.GetTodo(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.True(t, resp["success"].(bool))
+	assert.NotNil(t, resp["data"])
+	assert.Nil(t, resp["meta"])
 	repo.AssertExpectations(t)
 }
 
@@ -148,6 +165,11 @@ func TestGetTodo_NotFound(t *testing.T) {
 	h.GetTodo(rr, req)
 
 	assert.Equal(t, http.StatusNotFound, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	assert.Equal(t, "NOT_FOUND", resp["error"].(map[string]interface{})["code"])
 	repo.AssertExpectations(t)
 }
 
@@ -166,6 +188,10 @@ func TestDeleteTodo_Success(t *testing.T) {
 	h.DeleteTodo(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.True(t, resp["success"].(bool))
+	assert.Nil(t, resp["meta"])
 	repo.AssertExpectations(t)
 }
 
@@ -183,6 +209,11 @@ func TestCompleteTodo_AlreadyDone(t *testing.T) {
 	h.CompleteTodo(rr, req)
 
 	assert.Equal(t, http.StatusConflict, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	assert.Equal(t, "CONFLICT", resp["error"].(map[string]interface{})["code"])
 	repo.AssertExpectations(t)
 }
 
@@ -201,6 +232,11 @@ func TestCompleteTodo_Success(t *testing.T) {
 	h.CompleteTodo(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.True(t, resp["success"].(bool))
+	assert.NotNil(t, resp["data"])
+	assert.Nil(t, resp["meta"])
 	repo.AssertExpectations(t)
 }
 
@@ -209,7 +245,7 @@ func TestSearchTodos_Success(t *testing.T) {
 
 	id := uuid.New()
 	todos := []*entity.Todo{newTestTodo(id, "Test")}
-	repo.On("Search", mock.Anything, "test", 0, 20).Return(todos, 1, nil)
+	repo.On("Search", mock.Anything, "test", (*string)(nil), 20).Return(todos, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/todos/search?q=test", nil)
 	rr := httptest.NewRecorder()
@@ -217,6 +253,11 @@ func TestSearchTodos_Success(t *testing.T) {
 	h.SearchTodos(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.True(t, resp["success"].(bool))
+	assert.NotNil(t, resp["data"])
+	assert.NotNil(t, resp["meta"])
 	repo.AssertExpectations(t)
 }
 
@@ -229,4 +270,9 @@ func TestSearchTodos_MissingQuery(t *testing.T) {
 	h.SearchTodos(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	assert.Equal(t, "VALIDATION_ERROR", resp["error"].(map[string]interface{})["code"])
 }

@@ -2,11 +2,13 @@ package http
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
+	"strconv"
 
+	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/dto"
-	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/service"
+	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/query"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
@@ -15,12 +17,13 @@ import (
 )
 
 type Handler struct {
-	svc       *service.AuthorizationService
-	validator *validator.Validator
+	commandBus cqrs.CommandBus
+	queryBus   cqrs.QueryBus
+	validator  *validator.Validator
 }
 
-func NewHandler(svc *service.AuthorizationService, v *validator.Validator) *Handler {
-	return &Handler{svc: svc, validator: v}
+func NewHandler(commandBus cqrs.CommandBus, queryBus cqrs.QueryBus, v *validator.Validator) *Handler {
+	return &Handler{commandBus: commandBus, queryBus: queryBus, validator: v}
 }
 
 // CreateRole godoc
@@ -30,9 +33,9 @@ func NewHandler(svc *service.AuthorizationService, v *validator.Validator) *Hand
 // @Accept json
 // @Produce json
 // @Param request body dto.CreateRoleRequest true "Role to create"
-// @Success 201 {object} utils.SuccessResponse{data=dto.RoleResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 409 {object} utils.ErrorResponse
+// @Success 201 {object} utils.APIResponse{data=dto.RoleResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 409 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/roles [post]
 func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
@@ -45,12 +48,11 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	role, err := h.svc.CreateRole(r.Context(), req.Name, req.Description)
-	if err != nil {
-		utils.RespondConflict(w, "role already exists")
-		return
-	}
-	utils.RespondCreated(w, role)
+	resp, err := h.commandBus.Dispatch(r.Context(), command.CreateRoleCommand{
+		Name:        req.Name,
+		Description: req.Description,
+	})
+	utils.HandleCreated(w, resp, err)
 }
 
 // ListRoles godoc
@@ -60,24 +62,31 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param page query int false "Page number" default(1)
 // @Param per_page query int false "Items per page" default(20)
-// @Success 200 {object} utils.SuccessResponse{data=dto.ListResponse}
-// @Failure 500 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.ListResponse}
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/roles [get]
 func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
-	page, perPage := 1, 20
-	if p := r.URL.Query().Get("page"); p != "" {
-		fmt.Sscanf(p, "%d", &page)
+	cursorStr := r.URL.Query().Get("cursor")
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
 	}
-	if pp := r.URL.Query().Get("per_page"); pp != "" {
-		fmt.Sscanf(pp, "%d", &perPage)
+
+	var cursor *string
+	if cursorStr != "" {
+		cursor = &cursorStr
 	}
-	roles, total, err := h.svc.ListRoles(r.Context(), page, perPage)
+
+	resp, err := h.queryBus.Ask(r.Context(), query.ListRolesQuery{Cursor: cursor, Limit: limit})
 	if err != nil {
-		utils.RespondInternalError(w, "failed to list roles")
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
-	utils.RespondSuccess(w, dto.ListResponse{Items: roles, Total: total, Page: page, PerPage: perPage})
+	result := resp.(query.ListRolesResult)
+	utils.RespondCursorPaginated(w, result.Roles, result.NextCursor, result.PrevCursor, result.HasNext, result.HasPrev, limit)
 }
 
 // GetRole godoc
@@ -86,8 +95,8 @@ func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
 // @Tags authorization
 // @Produce json
 // @Param id path string true "Role ID"
-// @Success 200 {object} utils.SuccessResponse{data=dto.RoleResponse}
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.RoleResponse}
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/roles/{id} [get]
 func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
@@ -96,12 +105,8 @@ func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid role ID")
 		return
 	}
-	role, err := h.svc.GetRole(r.Context(), id)
-	if err != nil {
-		utils.RespondNotFound(w, "role not found")
-		return
-	}
-	utils.RespondSuccess(w, role)
+	resp, err := h.queryBus.Ask(r.Context(), query.GetRoleQuery{ID: id})
+	utils.Handle(w, resp, err)
 }
 
 // UpdateRole godoc
@@ -112,9 +117,9 @@ func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param id path string true "Role ID"
 // @Param request body dto.UpdateRoleRequest true "Fields to update"
-// @Success 200 {object} utils.SuccessResponse{data=dto.RoleResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.RoleResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/roles/{id} [put]
 func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
@@ -124,16 +129,16 @@ func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req dto.UpdateRoleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondBadRequest(w, "invalid request body")
 		return
 	}
-	role, err := h.svc.UpdateRole(r.Context(), id, req.Name, req.Description)
-	if err != nil {
-		utils.RespondNotFound(w, "role not found")
-		return
-	}
-	utils.RespondSuccess(w, role)
+	resp, err := h.commandBus.Dispatch(r.Context(), command.UpdateRoleCommand{
+		ID:          id,
+		Name:        req.Name,
+		Description: req.Description,
+	})
+	utils.Handle(w, resp, err)
 }
 
 // DeleteRole godoc
@@ -141,8 +146,8 @@ func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 // @Description Delete a role by ID
 // @Tags authorization
 // @Param id path string true "Role ID"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/roles/{id} [delete]
 func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
@@ -151,11 +156,8 @@ func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid role ID")
 		return
 	}
-	if err := h.svc.DeleteRole(r.Context(), id); err != nil {
-		utils.RespondNotFound(w, "role not found")
-		return
-	}
-	utils.RespondSuccess(w, nil)
+	_, err = h.commandBus.Dispatch(r.Context(), command.DeleteRoleCommand{ID: id})
+	utils.HandleNoContent(w, err)
 }
 
 // CreatePermission godoc
@@ -165,9 +167,9 @@ func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param request body dto.CreatePermissionRequest true "Permission to create"
-// @Success 201 {object} utils.SuccessResponse{data=dto.PermissionResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 409 {object} utils.ErrorResponse
+// @Success 201 {object} utils.APIResponse{data=dto.PermissionResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 409 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/permissions [post]
 func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
@@ -180,12 +182,13 @@ func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	perm, err := h.svc.CreatePermission(r.Context(), req.Name, req.Description, req.Resource, req.Action)
-	if err != nil {
-		utils.RespondConflict(w, "permission already exists")
-		return
-	}
-	utils.RespondCreated(w, perm)
+	resp, err := h.commandBus.Dispatch(r.Context(), command.CreatePermissionCommand{
+		Name:        req.Name,
+		Description: req.Description,
+		Resource:    req.Resource,
+		Action:      req.Action,
+	})
+	utils.HandleCreated(w, resp, err)
 }
 
 // ListPermissions godoc
@@ -195,24 +198,31 @@ func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param page query int false "Page number" default(1)
 // @Param per_page query int false "Items per page" default(20)
-// @Success 200 {object} utils.SuccessResponse{data=dto.ListResponse}
-// @Failure 500 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.ListResponse}
+// @Failure 500 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/permissions [get]
 func (h *Handler) ListPermissions(w http.ResponseWriter, r *http.Request) {
-	page, perPage := 1, 20
-	if p := r.URL.Query().Get("page"); p != "" {
-		fmt.Sscanf(p, "%d", &page)
+	cursorStr := r.URL.Query().Get("cursor")
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
 	}
-	if pp := r.URL.Query().Get("per_page"); pp != "" {
-		fmt.Sscanf(pp, "%d", &perPage)
+
+	var cursor *string
+	if cursorStr != "" {
+		cursor = &cursorStr
 	}
-	perms, total, err := h.svc.ListPermissions(r.Context(), page, perPage)
+
+	resp, err := h.queryBus.Ask(r.Context(), query.ListPermissionsQuery{Cursor: cursor, Limit: limit})
 	if err != nil {
-		utils.RespondInternalError(w, "failed to list permissions")
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
-	utils.RespondSuccess(w, dto.ListResponse{Items: perms, Total: total, Page: page, PerPage: perPage})
+	result := resp.(query.ListPermissionsResult)
+	utils.RespondCursorPaginated(w, result.Permissions, result.NextCursor, result.PrevCursor, result.HasNext, result.HasPrev, limit)
 }
 
 // GetPermission godoc
@@ -221,8 +231,8 @@ func (h *Handler) ListPermissions(w http.ResponseWriter, r *http.Request) {
 // @Tags authorization
 // @Produce json
 // @Param id path string true "Permission ID"
-// @Success 200 {object} utils.SuccessResponse{data=dto.PermissionResponse}
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.PermissionResponse}
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/permissions/{id} [get]
 func (h *Handler) GetPermission(w http.ResponseWriter, r *http.Request) {
@@ -231,12 +241,8 @@ func (h *Handler) GetPermission(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid permission ID")
 		return
 	}
-	perm, err := h.svc.GetPermission(r.Context(), id)
-	if err != nil {
-		utils.RespondNotFound(w, "permission not found")
-		return
-	}
-	utils.RespondSuccess(w, perm)
+	resp, err := h.queryBus.Ask(r.Context(), query.GetPermissionQuery{ID: id})
+	utils.Handle(w, resp, err)
 }
 
 // UpdatePermission godoc
@@ -247,9 +253,9 @@ func (h *Handler) GetPermission(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param id path string true "Permission ID"
 // @Param request body dto.UpdatePermissionRequest true "Fields to update"
-// @Success 200 {object} utils.SuccessResponse{data=dto.PermissionResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.PermissionResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/permissions/{id} [put]
 func (h *Handler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
@@ -259,16 +265,18 @@ func (h *Handler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req dto.UpdatePermissionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondBadRequest(w, "invalid request body")
 		return
 	}
-	perm, err := h.svc.UpdatePermission(r.Context(), id, req.Name, req.Description, req.Resource, req.Action)
-	if err != nil {
-		utils.RespondNotFound(w, "permission not found")
-		return
-	}
-	utils.RespondSuccess(w, perm)
+	resp, err := h.commandBus.Dispatch(r.Context(), command.UpdatePermissionCommand{
+		ID:          id,
+		Name:        req.Name,
+		Description: req.Description,
+		Resource:    req.Resource,
+		Action:      req.Action,
+	})
+	utils.Handle(w, resp, err)
 }
 
 // DeletePermission godoc
@@ -276,8 +284,8 @@ func (h *Handler) UpdatePermission(w http.ResponseWriter, r *http.Request) {
 // @Description Delete a permission by ID
 // @Tags authorization
 // @Param id path string true "Permission ID"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 404 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 404 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/permissions/{id} [delete]
 func (h *Handler) DeletePermission(w http.ResponseWriter, r *http.Request) {
@@ -286,11 +294,8 @@ func (h *Handler) DeletePermission(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid permission ID")
 		return
 	}
-	if err := h.svc.DeletePermission(r.Context(), id); err != nil {
-		utils.RespondNotFound(w, "permission not found")
-		return
-	}
-	utils.RespondSuccess(w, nil)
+	_, err = h.commandBus.Dispatch(r.Context(), command.DeletePermissionCommand{ID: id})
+	utils.HandleNoContent(w, err)
 }
 
 // AssignRole godoc
@@ -301,8 +306,8 @@ func (h *Handler) DeletePermission(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param userId path string true "User ID"
 // @Param request body dto.AssignRoleRequest true "Role to assign"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/users/{userId}/roles [post]
 func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
@@ -315,11 +320,11 @@ func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	if err := h.svc.AssignRoleToUser(r.Context(), req.UserID, req.RoleID); err != nil {
-		utils.RespondInternalError(w, "failed to assign role")
-		return
-	}
-	utils.RespondSuccess(w, nil)
+	_, err := h.commandBus.Dispatch(r.Context(), command.AssignRoleCommand{
+		UserID: req.UserID,
+		RoleID: req.RoleID,
+	})
+	utils.HandleNoContent(w, err)
 }
 
 // RemoveRole godoc
@@ -328,8 +333,8 @@ func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
 // @Tags authorization
 // @Param userId path string true "User ID"
 // @Param roleId path string true "Role ID"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/users/{userId}/roles/{roleId} [delete]
 func (h *Handler) RemoveRole(w http.ResponseWriter, r *http.Request) {
@@ -343,11 +348,11 @@ func (h *Handler) RemoveRole(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid role ID")
 		return
 	}
-	if err := h.svc.RemoveRoleFromUser(r.Context(), userID, roleID); err != nil {
-		utils.RespondInternalError(w, "failed to remove role")
-		return
-	}
-	utils.RespondSuccess(w, nil)
+	_, err = h.commandBus.Dispatch(r.Context(), command.UnassignRoleCommand{
+		UserID: userID,
+		RoleID: roleID,
+	})
+	utils.HandleNoContent(w, err)
 }
 
 // GetUserRoles godoc
@@ -356,8 +361,8 @@ func (h *Handler) RemoveRole(w http.ResponseWriter, r *http.Request) {
 // @Tags authorization
 // @Produce json
 // @Param userId path string true "User ID"
-// @Success 200 {object} utils.SuccessResponse{data=[]dto.RoleResponse}
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=[]dto.RoleResponse}
+// @Failure 400 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/users/{userId}/roles [get]
 func (h *Handler) GetUserRoles(w http.ResponseWriter, r *http.Request) {
@@ -366,12 +371,8 @@ func (h *Handler) GetUserRoles(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid user ID")
 		return
 	}
-	roles, err := h.svc.GetUserRoles(r.Context(), userID)
-	if err != nil {
-		utils.RespondInternalError(w, "failed to get user roles")
-		return
-	}
-	utils.RespondSuccess(w, roles)
+	resp, err := h.queryBus.Ask(r.Context(), query.GetUserRolesQuery{UserID: userID})
+	utils.Handle(w, resp, err)
 }
 
 // AssignPermission godoc
@@ -382,8 +383,8 @@ func (h *Handler) GetUserRoles(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param roleId path string true "Role ID"
 // @Param request body dto.AssignPermissionRequest true "Permission to assign"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/roles/{roleId}/permissions [post]
 func (h *Handler) AssignPermission(w http.ResponseWriter, r *http.Request) {
@@ -396,11 +397,11 @@ func (h *Handler) AssignPermission(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	if err := h.svc.AssignPermissionToRole(r.Context(), req.RoleID, req.PermissionID); err != nil {
-		utils.RespondInternalError(w, "failed to assign permission")
-		return
-	}
-	utils.RespondSuccess(w, nil)
+	_, err := h.commandBus.Dispatch(r.Context(), command.AssignPermissionCommand{
+		RoleID:       req.RoleID,
+		PermissionID: req.PermissionID,
+	})
+	utils.HandleNoContent(w, err)
 }
 
 // RemovePermission godoc
@@ -409,8 +410,8 @@ func (h *Handler) AssignPermission(w http.ResponseWriter, r *http.Request) {
 // @Tags authorization
 // @Param roleId path string true "Role ID"
 // @Param permissionId path string true "Permission ID"
-// @Success 200 {object} utils.SuccessResponse
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse
+// @Failure 400 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/roles/{roleId}/permissions/{permissionId} [delete]
 func (h *Handler) RemovePermission(w http.ResponseWriter, r *http.Request) {
@@ -424,11 +425,11 @@ func (h *Handler) RemovePermission(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid permission ID")
 		return
 	}
-	if err := h.svc.RemovePermissionFromRole(r.Context(), roleID, permID); err != nil {
-		utils.RespondInternalError(w, "failed to remove permission")
-		return
-	}
-	utils.RespondSuccess(w, nil)
+	_, err = h.commandBus.Dispatch(r.Context(), command.UnassignPermissionCommand{
+		RoleID:       roleID,
+		PermissionID: permID,
+	})
+	utils.HandleNoContent(w, err)
 }
 
 // GetRolePermissions godoc
@@ -437,8 +438,8 @@ func (h *Handler) RemovePermission(w http.ResponseWriter, r *http.Request) {
 // @Tags authorization
 // @Produce json
 // @Param roleId path string true "Role ID"
-// @Success 200 {object} utils.SuccessResponse{data=[]dto.PermissionResponse}
-// @Failure 400 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=[]dto.PermissionResponse}
+// @Failure 400 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/roles/{roleId}/permissions [get]
 func (h *Handler) GetRolePermissions(w http.ResponseWriter, r *http.Request) {
@@ -447,12 +448,8 @@ func (h *Handler) GetRolePermissions(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "invalid role ID")
 		return
 	}
-	perms, err := h.svc.GetRolePermissions(r.Context(), roleID)
-	if err != nil {
-		utils.RespondInternalError(w, "failed to get role permissions")
-		return
-	}
-	utils.RespondSuccess(w, perms)
+	resp, err := h.queryBus.Ask(r.Context(), query.GetRolePermissionsQuery{RoleID: roleID})
+	utils.Handle(w, resp, err)
 }
 
 // CheckPermission godoc
@@ -462,9 +459,9 @@ func (h *Handler) GetRolePermissions(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param request body dto.CheckPermissionRequest true "Permission to check"
-// @Success 200 {object} utils.SuccessResponse{data=dto.CheckPermissionResponse}
-// @Failure 400 {object} utils.ErrorResponse
-// @Failure 401 {object} utils.ErrorResponse
+// @Success 200 {object} utils.APIResponse{data=dto.CheckPermissionResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 401 {object} utils.APIResponse
 // @Security BearerAuth
 // @Router /auth/sessions/check-permission [post]
 func (h *Handler) CheckPermission(w http.ResponseWriter, r *http.Request) {
@@ -479,18 +476,19 @@ func (h *Handler) CheckPermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req dto.CheckPermissionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondBadRequest(w, "invalid request body")
 		return
 	}
-	if err := h.validator.Validate(req); err != nil {
+	if err = h.validator.Validate(req); err != nil {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	allowed, err := h.svc.CheckPermission(r.Context(), uid, req.Resource, req.Action)
-	if err != nil {
-		utils.RespondInternalError(w, "failed to check permission")
-		return
-	}
-	utils.RespondSuccess(w, dto.CheckPermissionResponse{Allowed: allowed})
+	resp, err := h.queryBus.Ask(r.Context(), query.CheckPermissionQuery{
+		UserID:   uid,
+		Resource: req.Resource,
+		Action:   req.Action,
+	})
+	allowed, _ := resp.(bool)
+	utils.Handle(w, dto.CheckPermissionResponse{Allowed: allowed}, err)
 }

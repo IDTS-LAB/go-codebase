@@ -13,17 +13,22 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/auditlog"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/config"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/google/uuid"
 	"github.com/rs/cors"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type contextKey string
 
 const (
-	RequestIDKey contextKey = "request_id"
-	UserIDKey    contextKey = "user_id"
-	UserEmailKey contextKey = "user_email"
-	UserRoleKey  contextKey = "user_role"
+	RequestIDKey   contextKey = "request_id"
+	UserIDKey      contextKey = "user_id"
+	UserEmailKey   contextKey = "user_email"
+	UserRoleKey    contextKey = "user_role"
+	TenantIDKey    contextKey = "tenant_id"
+	TenantClaimKey contextKey = "tenant_claim"
 )
 
 func ErrorHandler(log domain.Logger, errorRepo *auditlog.Repository) func(http.Handler) http.Handler {
@@ -32,7 +37,14 @@ func ErrorHandler(log domain.Logger, errorRepo *auditlog.Repository) func(http.H
 			defer func() {
 				if err := recover(); err != nil {
 					stack := string(debug.Stack())
-					log.Error(r.Context(), "panic recovered",
+					ctx := r.Context()
+
+					if span := trace.SpanFromContext(ctx); span.IsRecording() {
+						span.SetStatus(codes.Error, "panic recovered")
+						span.RecordError(fmt.Errorf("%v", err))
+					}
+
+					log.Error(ctx, "panic recovered",
 						domain.String("error", fmt.Sprintf("%v", err)),
 						domain.String("stack", stack),
 					)
@@ -40,7 +52,7 @@ func ErrorHandler(log domain.Logger, errorRepo *auditlog.Repository) func(http.H
 					persistError(r, errorRepo, log, http.StatusInternalServerError,
 						"panic recovered", fmt.Sprintf("%v", err), stack)
 
-					http.Error(w, `{"success":false,"error":{"code":"INTERNAL_ERROR","message":"internal server error"}}`, http.StatusInternalServerError)
+					utils.RespondInternalError(w, "internal server error")
 				}
 			}()
 			next.ServeHTTP(w, r)
@@ -55,8 +67,24 @@ func ErrorRecorder(log domain.Logger, errorRepo *auditlog.Repository) func(http.
 			next.ServeHTTP(wrapped, r)
 
 			if wrapped.statusCode >= 500 {
-				persistError(r, errorRepo, log, wrapped.statusCode,
-					http.StatusText(wrapped.statusCode), wrapped.errMsg, wrapped.stack)
+				ctx := r.Context()
+				if span := trace.SpanFromContext(ctx); span.IsRecording() {
+					span.SetStatus(codes.Error, http.StatusText(wrapped.statusCode))
+					if wrapped.errMsg != "" {
+						span.RecordError(fmt.Errorf("%s", wrapped.errMsg))
+					}
+				}
+
+				msg := http.StatusText(wrapped.statusCode)
+				errMsg := wrapped.errMsg
+				stack := wrapped.stack
+				if info, ok := utils.GetErrorInfo(ctx); ok && info.Err != nil {
+					msg = info.Err.Error()
+					errMsg = info.Err.Error()
+					stack = info.Stack
+				}
+
+				persistError(r, errorRepo, log, wrapped.statusCode, msg, errMsg, stack)
 			}
 		})
 	}
@@ -79,6 +107,7 @@ func persistError(r *http.Request, repo *auditlog.Repository, log domain.Logger,
 		StatusCode: status,
 		IP:         r.RemoteAddr,
 		UserAgent:  r.UserAgent(),
+		TenantID:   GetTenantID(r.Context()),
 		CreatedAt:  time.Now(),
 	}
 
@@ -172,7 +201,7 @@ func Authentication(tokenSvc domain.TokenService) func(http.Handler) http.Handle
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := r.Header.Get("Authorization")
 			if tokenStr == "" {
-				http.Error(w, `{"success":false,"error":{"code":"UNAUTHORIZED","message":"missing token"}}`, http.StatusUnauthorized)
+				utils.RespondUnauthorized(w, "missing token")
 				return
 			}
 
@@ -182,13 +211,14 @@ func Authentication(tokenSvc domain.TokenService) func(http.Handler) http.Handle
 
 			claims, err := tokenSvc.ValidateToken(tokenStr)
 			if err != nil {
-				http.Error(w, `{"success":false,"error":{"code":"UNAUTHORIZED","message":"invalid token"}}`, http.StatusUnauthorized)
+				utils.RespondUnauthorized(w, "invalid token")
 				return
 			}
 
 			ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
 			ctx = context.WithValue(ctx, UserEmailKey, claims.Email)
 			ctx = context.WithValue(ctx, UserRoleKey, claims.Role)
+			ctx = context.WithValue(ctx, TenantClaimKey, claims.TenantID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -199,7 +229,7 @@ func AuthenticationWithDenylist(tokenSvc domain.TokenService, denylistChecker fu
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := r.Header.Get("Authorization")
 			if tokenStr == "" {
-				http.Error(w, `{"success":false,"error":{"code":"UNAUTHORIZED","message":"missing token"}}`, http.StatusUnauthorized)
+				utils.RespondUnauthorized(w, "missing token")
 				return
 			}
 
@@ -209,18 +239,19 @@ func AuthenticationWithDenylist(tokenSvc domain.TokenService, denylistChecker fu
 
 			claims, err := tokenSvc.ValidateToken(tokenStr)
 			if err != nil {
-				http.Error(w, `{"success":false,"error":{"code":"UNAUTHORIZED","message":"invalid token"}}`, http.StatusUnauthorized)
+				utils.RespondUnauthorized(w, "invalid token")
 				return
 			}
 
 			if claims.JTI != "" && denylistChecker(r.Context(), claims.JTI) {
-				http.Error(w, `{"success":false,"error":{"code":"UNAUTHORIZED","message":"token has been revoked"}}`, http.StatusUnauthorized)
+				utils.RespondUnauthorized(w, "token has been revoked")
 				return
 			}
 
 			ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
 			ctx = context.WithValue(ctx, UserEmailKey, claims.Email)
 			ctx = context.WithValue(ctx, UserRoleKey, claims.Role)
+			ctx = context.WithValue(ctx, TenantClaimKey, claims.TenantID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -275,6 +306,13 @@ func GetUserRole(ctx context.Context) string {
 	return ""
 }
 
+func GetTenantID(ctx context.Context) string {
+	if v, ok := ctx.Value(TenantIDKey).(string); ok {
+		return v
+	}
+	return ""
+}
+
 type Authorizer interface {
 	Enforce(userID uuid.UUID, resource, action string) (bool, error)
 }
@@ -284,24 +322,24 @@ func Authorization(authorizer Authorizer, resource, action string) func(http.Han
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			userID := GetUserID(r.Context())
 			if userID == "" {
-				http.Error(w, `{"success":false,"error":{"code":"UNAUTHORIZED","message":"user not authenticated"}}`, http.StatusUnauthorized)
+				utils.RespondUnauthorized(w, "user not authenticated")
 				return
 			}
 
 			uid, err := uuid.Parse(userID)
 			if err != nil {
-				http.Error(w, `{"success":false,"error":{"code":"UNAUTHORIZED","message":"invalid user ID"}}`, http.StatusUnauthorized)
+				utils.RespondUnauthorized(w, "invalid user ID")
 				return
 			}
 
 			allowed, err := authorizer.Enforce(uid, resource, action)
 			if err != nil {
-				http.Error(w, `{"success":false,"error":{"code":"INTERNAL_ERROR","message":"authorization check failed"}}`, http.StatusInternalServerError)
+				utils.RespondInternalError(w, "authorization check failed")
 				return
 			}
 
 			if !allowed {
-				http.Error(w, `{"success":false,"error":{"code":"FORBIDDEN","message":"insufficient permissions"}}`, http.StatusForbidden)
+				utils.RespondForbidden(w, "FORBIDDEN", "insufficient permissions")
 				return
 			}
 

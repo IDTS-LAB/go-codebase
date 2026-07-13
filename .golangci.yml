@@ -1,5 +1,6 @@
 run:
   timeout: 5m
+  go: "1.24"
 
 linters:
   enable:
@@ -17,7 +18,8 @@ linters:
 
 linters-settings:
   govet:
-    check-shadowing: true
+    enable:
+      - shadow
   revive:
     rules:
       - name: exported

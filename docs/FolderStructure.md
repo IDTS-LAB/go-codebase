@@ -9,8 +9,17 @@ cmd/
 configs/                     # Configuration files
     config.yaml
 
+.github/                     # GitHub Actions workflows
+    workflows/
+        ci.yml                 # CI pipeline
+        cd.yml                 # CD pipeline
+
 deployments/                 # Deployment configs
     prometheus.yml
+
+k8s/                         # Kubernetes manifests
+    base/                    # Base Kustomize resources
+    overlays/                # Environment overlays (staging, production)
 
 docs/                        # Documentation
     README.md
@@ -51,6 +60,7 @@ internal/
     shared/                  # Shared kernel (cross-module)
         config/              # Koanf configuration loading
         database/            # PostgreSQL connection, sqlc, goose
+        events/              # EventBus interface + InMemoryEventBus + LoggingEventBus + Fx module
         middleware/           # HTTP middleware
             recovery.go      # Panic recovery
             request_id.go    # Request ID propagation
@@ -103,6 +113,7 @@ internal/
             entity/          # Entities (User, RefreshToken)
             repository/      # Repository interfaces
             service/         # Auth domain service
+            event/           # Domain events (UserRegistered, EmailVerified, PasswordResetRequested)
 
         application/         # Use cases
             dto/             # DTOs (RegisterRequest, LoginRequest, TokenResponse)
@@ -110,6 +121,7 @@ internal/
 
         infrastructure/      # External implementations
             persistence/     # SQLC repositories
+            eventbus/        # Event handler implementations (EmailHandler)
 
         interfaces/          # Delivery mechanisms
             http/            # HTTP handlers (Register, Login, Refresh, Logout, Me)

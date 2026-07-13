@@ -1,12 +1,12 @@
 package middleware
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -14,12 +14,9 @@ func RateLimit(rdb *redis.Client, limit int, window time.Duration) func(http.Han
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip := r.RemoteAddr
-			if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-				ip = fwd
-			}
 
 			key := fmt.Sprintf("ratelimit:%s", ip)
-			ctx := context.Background()
+			ctx := r.Context()
 
 			count, err := rdb.Incr(ctx, key).Result()
 			if err != nil {
@@ -38,7 +35,7 @@ func RateLimit(rdb *redis.Client, limit int, window time.Duration) func(http.Han
 
 			if count > int64(limit) {
 				w.Header().Set("Retry-After", strconv.Itoa(int(ttl.Seconds())+1))
-				http.Error(w, `{"success":false,"error":{"code":"RATE_LIMITED","message":"too many requests"}}`, http.StatusTooManyRequests)
+				utils.RespondError(w, http.StatusTooManyRequests, "RATE_LIMITED", "too many requests")
 				return
 			}
 

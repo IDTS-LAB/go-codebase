@@ -18,23 +18,23 @@ var Module = fx.Module("casbin", fx.Provide(NewEnforcer))
 
 type Enforcer struct {
 	enforcer *casbin.CachedEnforcer
-	loader   *PolicyLoader
+	adapter  *Adapter
 }
 
-func NewEnforcer(loader *PolicyLoader) (*Enforcer, error) {
+func NewEnforcer(adapter *Adapter) (*Enforcer, error) {
 	m, err := model.NewModelFromString(modelConf)
 	if err != nil {
 		return nil, fmt.Errorf("parse casbin model: %w", err)
 	}
 
-	enforcer, err := casbin.NewCachedEnforcer(m)
+	enforcer, err := casbin.NewCachedEnforcer(m, adapter)
 	if err != nil {
 		return nil, fmt.Errorf("create casbin enforcer: %w", err)
 	}
 
 	e := &Enforcer{
 		enforcer: enforcer,
-		loader:   loader,
+		adapter:  adapter,
 	}
 
 	if err := e.ReloadPolicies(context.Background()); err != nil {
@@ -45,32 +45,15 @@ func NewEnforcer(loader *PolicyLoader) (*Enforcer, error) {
 }
 
 func (e *Enforcer) ReloadPolicies(ctx context.Context) error {
-	policies, err := e.loader.LoadAllPolicies(ctx)
-	if err != nil {
-		return err
-	}
-
-	e.enforcer.ClearPolicy()
-	for _, p := range policies {
-		if _, err := e.enforcer.AddPolicy(p.Subject, p.Object, p.Action); err != nil {
-			return fmt.Errorf("add policy: %w", err)
-		}
+	if err := SyncAllPolicies(ctx, e.adapter.db, e.enforcer); err != nil {
+		return fmt.Errorf("reload policies: %w", err)
 	}
 	return nil
 }
 
 func (e *Enforcer) ReloadUserPolicies(ctx context.Context, userID uuid.UUID) error {
-	policies, err := e.loader.LoadUserPolicies(ctx, userID)
-	if err != nil {
-		return err
-	}
-
-	subject := userID.String()
-	e.enforcer.RemoveFilteredPolicy(0, subject)
-	for _, p := range policies {
-		if _, err := e.enforcer.AddPolicy(p.Subject, p.Object, p.Action); err != nil {
-			return fmt.Errorf("add user policy: %w", err)
-		}
+	if err := SyncUserPolicies(ctx, e.adapter.db, e.enforcer, userID); err != nil {
+		return fmt.Errorf("reload user policies: %w", err)
 	}
 	return nil
 }

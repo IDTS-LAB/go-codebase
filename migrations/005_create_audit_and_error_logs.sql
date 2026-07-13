@@ -1,6 +1,6 @@
 -- +goose Up
 
-CREATE TABLE audit_logs (
+CREATE TABLE IF NOT EXISTS  audit_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     request_id VARCHAR(100) NOT NULL,
     user_id UUID,
@@ -16,7 +16,7 @@ CREATE TABLE audit_logs (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE error_logs (
+CREATE TABLE IF NOT EXISTS  error_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     request_id VARCHAR(100) NOT NULL,
     user_id UUID,
@@ -35,15 +35,15 @@ CREATE TABLE error_logs (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_audit_logs_request_id ON audit_logs(request_id);
-CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id) WHERE user_id IS NOT NULL;
-CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
-CREATE INDEX idx_audit_logs_method_path ON audit_logs(method, path);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_request_id ON audit_logs(request_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_method_path ON audit_logs(method, path);
 
-CREATE INDEX idx_error_logs_request_id ON error_logs(request_id);
-CREATE INDEX idx_error_logs_level ON error_logs(level);
-CREATE INDEX idx_error_logs_created_at ON error_logs(created_at);
-CREATE INDEX idx_error_logs_status_code ON error_logs(status_code);
+CREATE INDEX IF NOT EXISTS idx_error_logs_request_id ON error_logs(request_id);
+CREATE INDEX IF NOT EXISTS idx_error_logs_level ON error_logs(level);
+CREATE INDEX IF NOT EXISTS idx_error_logs_created_at ON error_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_error_logs_status_code ON error_logs(status_code);
 
 -- +goose Down
 

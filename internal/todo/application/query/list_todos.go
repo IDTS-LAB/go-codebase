@@ -3,14 +3,22 @@ package query
 import (
 	"context"
 
-	"github.com/IDTS-LAB/go-codebase/internal/todo/application/dto"
-	"github.com/IDTS-LAB/go-codebase/internal/todo/application/mapper"
+	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/entity"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/service"
 )
 
 type ListTodosQuery struct {
-	Page    int
-	PerPage int
+	Cursor *string
+	Limit  int
+}
+
+type ListTodosResult struct {
+	Todos      []*entity.Todo
+	NextCursor *string
+	PrevCursor *string
+	HasNext    bool
+	HasPrev    bool
+	Limit      int
 }
 
 type ListTodosHandler struct {
@@ -21,11 +29,18 @@ func NewListTodosHandler(domainSvc *service.TodoDomainService) *ListTodosHandler
 	return &ListTodosHandler{domainSvc: domainSvc}
 }
 
-func (h *ListTodosHandler) Handle(ctx context.Context, q ListTodosQuery) (dto.TodoListResponse, error) {
-	offset := (q.Page - 1) * q.PerPage
-	todos, total, err := h.domainSvc.ListTodos(ctx, offset, q.PerPage)
+func (h *ListTodosHandler) Handle(ctx context.Context, q any) (any, error) {
+	query := q.(ListTodosQuery)
+	todos, nextCursor, prevCursor, hasNext, hasPrev, err := h.domainSvc.ListTodos(ctx, query.Cursor, query.Limit)
 	if err != nil {
-		return dto.TodoListResponse{}, err
+		return nil, err
 	}
-	return mapper.ToTodoListResponse(todos, total, q.Page, q.PerPage), nil
+	return ListTodosResult{
+		Todos:      todos,
+		NextCursor: nextCursor,
+		PrevCursor: prevCursor,
+		HasNext:    hasNext,
+		HasPrev:    hasPrev,
+		Limit:      query.Limit,
+	}, nil
 }

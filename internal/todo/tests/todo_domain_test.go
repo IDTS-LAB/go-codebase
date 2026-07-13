@@ -165,12 +165,11 @@ func TestTodoDomainService_ListTodos(t *testing.T) {
 		newTestTodo(uuid.New(), "Todo 1"),
 		newTestTodo(uuid.New(), "Todo 2"),
 	}
-	repo.On("GetAll", mock.Anything, 0, 10).Return(todos, 2, nil)
+	repo.On("GetAll", mock.Anything, (*string)(nil), 10).Return(todos, nil)
 
-	result, total, err := svc.ListTodos(context.Background(), 0, 10)
+	result, _, _, _, _, err := svc.ListTodos(context.Background(), nil, 10)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 2, total)
 	assert.Len(t, result, 2)
 }
 
@@ -181,11 +180,10 @@ func TestTodoDomainService_SearchTodos(t *testing.T) {
 	todos := []*entity.Todo{
 		newTestTodo(uuid.New(), "Test Todo"),
 	}
-	repo.On("Search", mock.Anything, "test", 0, 10).Return(todos, 1, nil)
+	repo.On("Search", mock.Anything, "test", (*string)(nil), 10).Return(todos, nil)
 
-	result, total, err := svc.SearchTodos(context.Background(), "test", 0, 10)
+	result, _, _, _, _, err := svc.SearchTodos(context.Background(), "test", nil, 10)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 1, total)
 	assert.Len(t, result, 1)
 }

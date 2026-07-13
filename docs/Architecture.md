@@ -88,6 +88,45 @@ Casbin-based RBAC with database-backed policies:
 - Middleware enforces permissions on protected routes
 - Check permission endpoint for runtime validation
 
+## Event-Driven & Response Handling
+
+### Event-Driven Email
+
+Services publish domain events to an `EventBus` interface (in-memory synchronous by default, swappable for RabbitMQ/Kafka). An `EmailHandler` subscribes to auth domain events (`auth.user.registered`, `auth.user.email_verified`, `auth.user.password_reset_requested`) and calls the appropriate mailer method.
+
+Flow: `Service → EventBus.Publish() → EmailHandler → domain.Emailer.Send*()`
+
+### Event Error Handling
+
+A `LoggingEventBus` decorator wraps the concrete bus and logs every publish failure through `domain.Logger`. Event handlers return errors instead of swallowing them, so mailer failures (SMTP down, SendGrid error, etc.) are recorded without breaking the originating HTTP request. Services discard the returned publish error after the decorator has logged it, keeping side effects best-effort.
+
+### OpenTelemetry Tracing
+
+Every HTTP request gets an OpenTelemetry span via a Chi middleware. The middleware:
+- Extracts incoming W3C trace context (`traceparent`/`baggage` headers)
+- Starts a span named `<METHOD> <path>`
+- Records the response status code
+- Marks the span as error for 4xx/5xx responses
+
+The `ZapLogger` extracts `trace_id` and `span_id` from the context and attaches them to every log entry, so logs and traces are correlated. Panics and 5xx errors are recorded as exceptions on the current span.
+
+### API Response Format
+
+All HTTP responses use a unified envelope:
+
+```json
+// Success (single)
+{"success": true, "data": {...}, "meta": null}
+
+// Success (paginated list)
+{"success": true, "data": [...], "meta": {"page": 1, "per_page": 20, "total": 100, "total_pages": 5}}
+
+// Error
+{"success": false, "data": null, "error": {"code": "VALIDATION_ERROR", "message": "..."}}
+```
+
+Errors are mapped to HTTP status codes via `utils.MapError`, which translates `domain.ErrNotFound`, `domain.ErrConflict`, etc.
+
 ## Module Registration
 
 Every module follows this pattern:

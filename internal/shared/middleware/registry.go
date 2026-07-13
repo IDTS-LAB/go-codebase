@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/auditlog"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/config"
-	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -20,6 +20,7 @@ type Registry struct {
 	RateLimit     func(http.Handler) http.Handler
 	Idempotency   func(http.Handler) http.Handler
 	MaxBodySize   func(http.Handler) http.Handler
+	Tracing       func(http.Handler) http.Handler
 	Authorizer    Authorizer
 }
 
@@ -42,11 +43,12 @@ func NewRegistry(
 		Auth:          auth,
 		Logger:        Logger(log),
 		ErrorHandler:  ErrorHandler(log, errorRepo),
-		ErrorRecorder: ErrorRecorder(nil, errorRepo),
+		ErrorRecorder: ErrorRecorder(log, errorRepo),
 		AuditLog:      AuditLog(errorRepo),
 		RateLimit:     RateLimit(rdb, cfg.RateLimit.Requests, time.Duration(cfg.RateLimit.Window)*time.Second),
 		Idempotency:   Idempotency(rdb, time.Duration(cfg.Idempotency.TTL)*time.Second),
 		MaxBodySize:   MaxBodySize(int64(cfg.Server.MaxRequestBodySize)),
+		Tracing:       Tracing(),
 		Authorizer:    authorizer,
 	}
 }

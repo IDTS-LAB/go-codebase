@@ -11,7 +11,7 @@ type RoleRepository interface {
 	Create(ctx context.Context, role *entity.Role) error
 	GetByID(ctx context.Context, id uuid.UUID) (*entity.Role, error)
 	GetByName(ctx context.Context, name string) (*entity.Role, error)
-	GetAll(ctx context.Context, offset, limit int) ([]*entity.Role, int, error)
+	GetAll(ctx context.Context, cursor *string, limit int) ([]*entity.Role, *string, *string, bool, bool, error)
 	Update(ctx context.Context, role *entity.Role) error
 	Delete(ctx context.Context, id uuid.UUID) error
 }
@@ -20,7 +20,7 @@ type PermissionRepository interface {
 	Create(ctx context.Context, perm *entity.Permission) error
 	GetByID(ctx context.Context, id uuid.UUID) (*entity.Permission, error)
 	GetByName(ctx context.Context, name string) (*entity.Permission, error)
-	GetAll(ctx context.Context, offset, limit int) ([]*entity.Permission, int, error)
+	GetAll(ctx context.Context, cursor *string, limit int) ([]*entity.Permission, *string, *string, bool, bool, error)
 	Update(ctx context.Context, perm *entity.Permission) error
 	Delete(ctx context.Context, id uuid.UUID) error
 }

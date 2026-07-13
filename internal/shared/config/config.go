@@ -30,6 +30,8 @@ type Config struct {
 	Log         LogConfig
 	Telemetry   TelemetryConfig
 	Asynq       AsynqConfig
+	Email       EmailConfig
+	Tenant      TenantConfig
 }
 
 // AppConfig holds application-level settings.
@@ -74,11 +76,11 @@ type NATSConfig struct {
 
 // AuthConfig holds authentication and security settings.
 type AuthConfig struct {
-	JWTSecret         string
-	JWTExpiration     int
-	MaxLoginAttempts  int
-	LockoutDuration   int
-	TokenDenylist     bool
+	JWTSecret        string
+	JWTExpiration    int
+	MaxLoginAttempts int
+	LockoutDuration  int
+	TokenDenylist    bool
 }
 
 // RateLimitConfig holds rate limiting settings.
@@ -120,6 +122,38 @@ type AsynqConfig struct {
 	RedisAddr string
 }
 
+// TenantConfig holds multi-tenancy settings.
+type TenantConfig struct {
+	Enabled        bool   `yaml:"enabled"`
+	TenantHeader   string `yaml:"tenant_header"`
+	TenantJWTClaim string `yaml:"tenant_jwt_claim"`
+	Domain         string `yaml:"domain"`
+}
+
+// EmailConfig holds email service settings.
+type EmailConfig struct {
+	Provider    string         `koanf:"provider"`
+	From        string         `koanf:"from"`
+	FromName    string         `koanf:"from_name"`
+	FrontendURL string         `koanf:"frontend_url"`
+	SMTP        SMTPConfig     `koanf:"smtp"`
+	SendGrid    SendGridConfig `koanf:"sendgrid"`
+}
+
+// SMTPConfig holds SMTP server settings.
+type SMTPConfig struct {
+	Host     string `koanf:"host"`
+	Port     int    `koanf:"port"`
+	Username string `koanf:"username"`
+	Password string `koanf:"password"`
+	UseTLS   bool   `koanf:"use_tls"`
+}
+
+// SendGridConfig holds SendGrid API settings.
+type SendGridConfig struct {
+	APIKey string `koanf:"api_key"`
+}
+
 func New() (*Config, error) {
 	_ = godotenv.Load()
 
@@ -129,9 +163,11 @@ func New() (*Config, error) {
 		fmt.Printf("warning: could not load config.yaml: %v\n", err)
 	}
 
-	k.Load(env.ProviderWithValue("", ".", func(s string, v string) (string, interface{}) {
-		return strings.Replace(strings.ToLower(s), "_", ".", -1), v
-	}), nil)
+	if err := k.Load(env.ProviderWithValue("", ".", func(s string, v string) (string, interface{}) {
+		return strings.ReplaceAll(strings.ToLower(s), "_", "."), v
+	}), nil); err != nil {
+		fmt.Printf("warning: could not load env config: %v\n", err)
+	}
 
 	cfg := &Config{}
 	if err := k.Unmarshal("", cfg); err != nil {
@@ -227,6 +263,40 @@ func setDefaults(cfg *Config) {
 	// Telemetry
 	if cfg.Telemetry.SampleRate == 0 {
 		cfg.Telemetry.SampleRate = 1.0
+	}
+
+	// Email
+	if cfg.Email.Provider == "" {
+		cfg.Email.Provider = "console"
+	}
+	if cfg.Email.From == "" {
+		cfg.Email.From = "no-reply@example.com"
+	}
+	if cfg.Email.FromName == "" {
+		cfg.Email.FromName = "App"
+	}
+	if cfg.Email.FrontendURL == "" {
+		cfg.Email.FrontendURL = "http://localhost:3000"
+	}
+	if cfg.Email.SMTP.Host == "" {
+		cfg.Email.SMTP.Host = "localhost"
+	}
+	if cfg.Email.SMTP.Port == 0 {
+		cfg.Email.SMTP.Port = 587
+	}
+	if !cfg.Email.SMTP.UseTLS && cfg.Email.SMTP.Host == "localhost" {
+		cfg.Email.SMTP.UseTLS = true
+	}
+
+	// Tenant
+	if cfg.Tenant.TenantHeader == "" {
+		cfg.Tenant.TenantHeader = "X-Tenant-ID"
+	}
+	if cfg.Tenant.TenantJWTClaim == "" {
+		cfg.Tenant.TenantJWTClaim = "tenant_id"
+	}
+	if cfg.Tenant.Domain == "" {
+		cfg.Tenant.Domain = "app.com"
 	}
 }
 
@@ -400,5 +470,50 @@ func applyEnvOverrides(cfg *Config) {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			cfg.Telemetry.SampleRate = f
 		}
+	}
+
+	// Email
+	if v := os.Getenv("EMAIL_PROVIDER"); v != "" {
+		cfg.Email.Provider = v
+	}
+	if v := os.Getenv("EMAIL_FROM"); v != "" {
+		cfg.Email.From = v
+	}
+	if v := os.Getenv("EMAIL_FROM_NAME"); v != "" {
+		cfg.Email.FromName = v
+	}
+	if v := os.Getenv("FRONTEND_URL"); v != "" {
+		cfg.Email.FrontendURL = v
+	}
+	if v := os.Getenv("SMTP_HOST"); v != "" {
+		cfg.Email.SMTP.Host = v
+	}
+	if v := os.Getenv("SMTP_PORT"); v != "" {
+		if port, err := strconv.Atoi(v); err == nil {
+			cfg.Email.SMTP.Port = port
+		}
+	}
+	if v := os.Getenv("SMTP_USERNAME"); v != "" {
+		cfg.Email.SMTP.Username = v
+	}
+	if v := os.Getenv("SMTP_PASSWORD"); v != "" {
+		cfg.Email.SMTP.Password = v
+	}
+	if v := os.Getenv("SMTP_USE_TLS"); v != "" {
+		cfg.Email.SMTP.UseTLS = v == "true" || v == "1"
+	}
+	if v := os.Getenv("SENDGRID_API_KEY"); v != "" {
+		cfg.Email.SendGrid.APIKey = v
+	}
+
+	// Tenant
+	if v := os.Getenv("MULTITENANCY_ENABLED"); v != "" {
+		cfg.Tenant.Enabled = v == "true" || v == "1"
+	}
+	if v := os.Getenv("MULTITENANCY_TENANT_HEADER"); v != "" {
+		cfg.Tenant.TenantHeader = v
+	}
+	if v := os.Getenv("MULTITENANCY_DOMAIN"); v != "" {
+		cfg.Tenant.Domain = v
 	}
 }

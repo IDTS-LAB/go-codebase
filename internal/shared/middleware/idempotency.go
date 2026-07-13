@@ -44,7 +44,7 @@ func Idempotency(rdb *redis.Client, ttl time.Duration) func(http.Handler) http.H
 					w.Header().Set("Content-Type", "application/json")
 					w.Header().Set("Idempotency-Key", key)
 					w.WriteHeader(entry.StatusCode)
-					w.Write(entry.Body)
+					_, _ = w.Write(entry.Body)
 					return
 				}
 			}

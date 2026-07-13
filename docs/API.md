@@ -1,5 +1,41 @@
 # API Documentation
 
+## Response Format
+
+All API responses follow this structure:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | bool | Always present. `true` for success, `false` for error. |
+| `data` | any | Response payload. `null` on errors. |
+| `meta` | object or null | Pagination metadata. `null` for single-resource responses. |
+| `error` | object or omitted | Error details. Present only on errors. |
+
+### Pagination
+
+Paginated list endpoints return `meta`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `page` | int | Current page number |
+| `per_page` | int | Items per page |
+| `total` | int | Total items across all pages |
+| `total_pages` | int | Total number of pages |
+
+### Error Codes
+
+| HTTP | Code | Description |
+|------|------|-------------|
+| 400 | `VALIDATION_ERROR` | Invalid request body or parameters |
+| 401 | `UNAUTHORIZED` | Missing, invalid, or expired token |
+| 403 | `FORBIDDEN` | Insufficient permissions |
+| 403 | `ACCOUNT_LOCKED` | Account temporarily locked |
+| 403 | `EMAIL_NOT_VERIFIED` | Email not verified |
+| 404 | `NOT_FOUND` | Resource not found |
+| 409 | `CONFLICT` | Duplicate or state conflict |
+| 429 | `RATE_LIMITED` | Rate limit exceeded |
+| 500 | `INTERNAL_ERROR` | Unexpected server error |
+
 ## Base URL
 
 ```
@@ -49,7 +85,8 @@ Authorization: Bearer <token>
 ```json
 {
   "success": true,
-  "data": { ... }
+  "data": { ... },
+  "meta": null
 }
 ```
 
@@ -58,6 +95,7 @@ Authorization: Bearer <token>
 ```json
 {
   "success": false,
+  "data": null,
   "error": {
     "code": "ERROR_CODE",
     "message": "Human readable message"
@@ -283,11 +321,12 @@ Response (200):
 ```json
 {
   "success": true,
-  "data": {
-    "todos": [...],
-    "total": 100,
+  "data": [...],
+  "meta": {
     "page": 1,
-    "limit": 20
+    "per_page": 20,
+    "total": 100,
+    "total_pages": 5
   }
 }
 ```

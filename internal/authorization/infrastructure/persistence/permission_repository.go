@@ -4,23 +4,38 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/entity"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/repository"
+	"github.com/IDTS-LAB/go-codebase/internal/authorization/infrastructure/persistence/sqlc"
+	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cursor"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/tenantfilter"
 	"github.com/google/uuid"
 )
 
 type permissionRepository struct {
-	db *sql.DB
+	db           *sql.DB
+	tenantConfig *tenantfilter.Config
 }
 
-func NewPermissionRepository(db *sql.DB) repository.PermissionRepository {
-	return &permissionRepository{db: db}
+func NewPermissionRepository(db *sql.DB, tenantConfig *tenantfilter.Config) repository.PermissionRepository {
+	return &permissionRepository{db: db, tenantConfig: tenantConfig}
 }
 
 func (r *permissionRepository) Create(ctx context.Context, perm *entity.Permission) error {
-	query := `INSERT INTO permissions (id, name, description, resource, action, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`
-	_, err := r.db.ExecContext(ctx, query, perm.ID, perm.Name, perm.Description, perm.Resource, perm.Action, perm.CreatedAt, perm.UpdatedAt)
+	q := sqlc.New(r.db)
+	err := q.CreatePermission(ctx, sqlc.CreatePermissionParams{
+		ID:          perm.ID,
+		Name:        perm.Name,
+		Description: perm.Description,
+		Resource:    perm.Resource,
+		Action:      perm.Action,
+		CreatedAt:   perm.CreatedAt,
+		UpdatedAt:   perm.UpdatedAt,
+	})
 	if err != nil {
 		return fmt.Errorf("insert permission: %w", err)
 	}
@@ -28,62 +43,115 @@ func (r *permissionRepository) Create(ctx context.Context, perm *entity.Permissi
 }
 
 func (r *permissionRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Permission, error) {
-	query := `SELECT id, name, description, resource, action, created_at, updated_at, deleted_at FROM permissions WHERE id = $1 AND deleted_at IS NULL`
-	perm := &entity.Permission{}
-	err := r.db.QueryRowContext(ctx, query, id).Scan(&perm.ID, &perm.Name, &perm.Description, &perm.Resource, &perm.Action, &perm.CreatedAt, &perm.UpdatedAt, &perm.DeletedAt)
+	q := sqlc.New(r.db)
+	row, err := q.GetPermissionByID(ctx, id)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("permission not found")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get permission: %w", err)
 	}
-	return perm, nil
+	return mapPermissionRowToEntity(row.ID, row.Name, row.Description, row.Resource, row.Action, row.CreatedAt, row.UpdatedAt, row.DeletedAt), nil
 }
 
 func (r *permissionRepository) GetByName(ctx context.Context, name string) (*entity.Permission, error) {
-	query := `SELECT id, name, description, resource, action, created_at, updated_at, deleted_at FROM permissions WHERE name = $1 AND deleted_at IS NULL`
-	perm := &entity.Permission{}
-	err := r.db.QueryRowContext(ctx, query, name).Scan(&perm.ID, &perm.Name, &perm.Description, &perm.Resource, &perm.Action, &perm.CreatedAt, &perm.UpdatedAt, &perm.DeletedAt)
+	q := sqlc.New(r.db)
+	row, err := q.GetPermissionByName(ctx, name)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("permission not found")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get permission by name: %w", err)
 	}
-	return perm, nil
+	return mapPermissionRowToEntity(row.ID, row.Name, row.Description, row.Resource, row.Action, row.CreatedAt, row.UpdatedAt, row.DeletedAt), nil
 }
 
-func (r *permissionRepository) GetAll(ctx context.Context, offset, limit int) ([]*entity.Permission, int, error) {
-	var total int
-	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM permissions WHERE deleted_at IS NULL`).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("count permissions: %w", err)
+func (r *permissionRepository) GetAll(ctx context.Context, cursorArg *string, limit int) ([]*entity.Permission, *string, *string, bool, bool, error) {
+	args := []interface{}{}
+	whereClause := "WHERE deleted_at IS NULL"
+
+	if r.tenantConfig != nil && r.tenantConfig.Enabled {
+		tenantID := middleware.GetTenantID(ctx)
+		if tenantID != "" {
+			whereClause += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+			args = append(args, tenantID)
+		}
 	}
 
-	query := `SELECT id, name, description, resource, action, created_at, updated_at, deleted_at FROM permissions WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2`
-	rows, err := r.db.QueryContext(ctx, query, limit, offset)
+	nextPos := len(args) + 1
+	if cursorArg != nil {
+		c, err := cursor.Decode(*cursorArg)
+		if err != nil {
+			return nil, nil, nil, false, false, fmt.Errorf("invalid cursor: %w", err)
+		}
+		whereClause += fmt.Sprintf(" AND (created_at, id) < ($%d, $%d)", nextPos, nextPos+1)
+		args = append(args, c.Timestamp, c.ID)
+		nextPos += 2
+	}
+
+	dataQuery := fmt.Sprintf("SELECT id, name, description, resource, action, created_at, updated_at, deleted_at FROM permissions %s ORDER BY created_at DESC, id DESC LIMIT $%d", whereClause, nextPos)
+	args = append(args, limit+1)
+
+	rows, err := r.db.QueryContext(ctx, dataQuery, args...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("query permissions: %w", err)
+		return nil, nil, nil, false, false, fmt.Errorf("query permissions: %w", err)
 	}
 	defer rows.Close()
 
 	var perms []*entity.Permission
 	for rows.Next() {
-		perm := &entity.Permission{}
-		if err := rows.Scan(&perm.ID, &perm.Name, &perm.Description, &perm.Resource, &perm.Action, &perm.CreatedAt, &perm.UpdatedAt, &perm.DeletedAt); err != nil {
-			return nil, 0, fmt.Errorf("scan permission: %w", err)
+		var p entity.Permission
+		var deletedAt sql.NullTime
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Resource, &p.Action, &p.CreatedAt, &p.UpdatedAt, &deletedAt); err != nil {
+			return nil, nil, nil, false, false, fmt.Errorf("scan permission: %w", err)
 		}
-		perms = append(perms, perm)
+		if deletedAt.Valid {
+			p.DeletedAt = &deletedAt.Time
+		}
+		perms = append(perms, &p)
 	}
-	return perms, total, nil
+	if err := rows.Err(); err != nil {
+		return nil, nil, nil, false, false, fmt.Errorf("rows iteration: %w", err)
+	}
+
+	hasNext := len(perms) > limit
+	if hasNext {
+		perms = perms[:limit]
+	}
+
+	var nextCursor *string
+	var prevCursor *string
+	if len(perms) > 0 {
+		last := perms[len(perms)-1]
+		nc := cursor.Encode(last.CreatedAt, last.ID)
+		nextCursor = &nc
+
+		first := perms[0]
+		pc := cursor.Encode(first.CreatedAt, first.ID)
+		prevCursor = &pc
+	}
+
+	hasPrev := cursorArg != nil
+	if hasPrev && len(perms) == 0 {
+		hasPrev = false
+	}
+
+	return perms, nextCursor, prevCursor, hasNext, hasPrev, nil
 }
 
 func (r *permissionRepository) Update(ctx context.Context, perm *entity.Permission) error {
-	query := `UPDATE permissions SET name = $2, description = $3, resource = $4, action = $5, updated_at = $6 WHERE id = $1 AND deleted_at IS NULL`
-	result, err := r.db.ExecContext(ctx, query, perm.ID, perm.Name, perm.Description, perm.Resource, perm.Action, perm.UpdatedAt)
+	q := sqlc.New(r.db)
+	rows, err := q.UpdatePermission(ctx, sqlc.UpdatePermissionParams{
+		ID:          perm.ID,
+		Name:        perm.Name,
+		Description: perm.Description,
+		Resource:    perm.Resource,
+		Action:      perm.Action,
+		UpdatedAt:   perm.UpdatedAt,
+	})
 	if err != nil {
 		return fmt.Errorf("update permission: %w", err)
 	}
-	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		return fmt.Errorf("permission not found")
 	}
@@ -91,14 +159,28 @@ func (r *permissionRepository) Update(ctx context.Context, perm *entity.Permissi
 }
 
 func (r *permissionRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	query := `UPDATE permissions SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
-	result, err := r.db.ExecContext(ctx, query, id)
+	q := sqlc.New(r.db)
+	rows, err := q.DeletePermission(ctx, id)
 	if err != nil {
 		return fmt.Errorf("delete permission: %w", err)
 	}
-	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		return fmt.Errorf("permission not found")
 	}
 	return nil
+}
+
+func mapPermissionRowToEntity(id uuid.UUID, name, description, resource, action string, createdAt, updatedAt time.Time, deletedAt sql.NullTime) *entity.Permission {
+	return &entity.Permission{
+		Entity: domain.Entity{
+			ID:        id,
+			CreatedAt: createdAt,
+			UpdatedAt: updatedAt,
+			DeletedAt: nullTimeToPtr(deletedAt),
+		},
+		Name:        name,
+		Description: description,
+		Resource:    resource,
+		Action:      action,
+	}
 }

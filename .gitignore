@@ -17,3 +17,8 @@ vendor/
 docs/docs.go
 docs/swagger.json
 docs/swagger.yaml
+.worktrees
+
+# SQLc generated code (regenerate with `make sqlc`)
+**/infrastructure/persistence/sqlc/
+internal/shared/auditlog/sqlc/

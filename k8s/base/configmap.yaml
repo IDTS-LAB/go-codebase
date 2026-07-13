@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: go-codebase-config
+  namespace: go-codebase
+data:
+  APP_ENV: "production"
+  SERVER_PORT: "8080"
+  DB_PORT: "5432"
+  DB_SSLMODE: "disable"
+  DB_MAX_OPEN_CONNS: "25"
+  DB_MAX_IDLE_CONNS: "5"
+  DB_CONN_MAX_LIFETIME: "300"
+  REDIS_DB: "0"
+  REDIS_POOL_SIZE: "10"
+  MAX_LOGIN_ATTEMPTS: "5"
+  LOCKOUT_DURATION: "900"
+  TOKEN_DENYLIST: "true"
+  RATE_LIMIT_REQUESTS: "100"
+  RATE_LIMIT_WINDOW: "60"
+  IDEMPOTENCY_ENABLED: "false"
+  IDEMPOTENCY_TTL: "86400"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  OTEL_SERVICE_NAME: "go-codebase"
+  OTEL_SAMPLE_RATE: "1.0"

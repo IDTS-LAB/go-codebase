@@ -54,8 +54,14 @@ auth:
   lockout_duration: 900
   token_denylist: true
 
+multitenancy:
+  enabled: false
+  tenant_header: "X-Tenant-ID"
+  tenant_jwt_claim: "tenant_id"
+  domain: "app.com"
+
 cors:
-  allowed_origins: ["*"]
+  allowed_origins: ["http://localhost:3000", "http://localhost:8080"]
   allowed_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
   allowed_headers: ["Accept", "Authorization", "Content-Type", "X-Request-ID"]
   allow_credentials: true
@@ -92,3 +98,20 @@ telemetry:
 # =============================================================================
 asynq:
   redis_addr: localhost:6379
+
+# =============================================================================
+# Email Service
+# =============================================================================
+email:
+  provider: console
+  from: "no-reply@example.com"
+  from_name: "App"
+  frontend_url: "http://localhost:3000"
+  smtp:
+    host: localhost
+    port: 587
+    username: ""
+    password: ""
+    use_tls: true
+  sendgrid:
+    api_key: ""

@@ -3,17 +3,17 @@ package domain
 import "errors"
 
 var (
-	ErrNotFound    = errors.New("entity not found")
+	ErrNotFound      = errors.New("entity not found")
 	ErrAlreadyExists = errors.New("entity already exists")
-	ErrInvalidID   = errors.New("invalid entity ID")
-	ErrDeleted     = errors.New("entity is deleted")
-	ErrConflict    = errors.New("entity conflict")
-	ErrValidation  = errors.New("validation failed")
-	ErrForbidden   = errors.New("forbidden")
-	ErrUnauthorized = errors.New("unauthorized")
+	ErrInvalidID     = errors.New("invalid entity ID")
+	ErrDeleted       = errors.New("entity is deleted")
+	ErrConflict      = errors.New("entity conflict")
+	ErrValidation    = errors.New("validation failed")
+	ErrForbidden     = errors.New("forbidden")
+	ErrUnauthorized  = errors.New("unauthorized")
 )
 
-type DomainError struct {
+type DomainError struct { //nolint:revive
 	Err     error
 	Code    string
 	Message string

@@ -7,6 +7,7 @@ import (
 
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/entity"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/repository"
+	"github.com/IDTS-LAB/go-codebase/internal/authorization/infrastructure/persistence/sqlc"
 	"github.com/google/uuid"
 )
 
@@ -19,8 +20,11 @@ func NewRolePermissionRepository(db *sql.DB) repository.RolePermissionRepository
 }
 
 func (r *rolePermissionRepository) Assign(ctx context.Context, rp entity.RolePermission) error {
-	query := `INSERT INTO role_permissions (role_id, permission_id, created_at) VALUES ($1, $2, NOW()) ON CONFLICT (role_id, permission_id) DO NOTHING`
-	_, err := r.db.ExecContext(ctx, query, rp.RoleID, rp.PermissionID)
+	q := sqlc.New(r.db)
+	err := q.AssignRolePermission(ctx, sqlc.AssignRolePermissionParams{
+		RoleID:       rp.RoleID,
+		PermissionID: rp.PermissionID,
+	})
 	if err != nil {
 		return fmt.Errorf("assign permission: %w", err)
 	}
@@ -28,8 +32,11 @@ func (r *rolePermissionRepository) Assign(ctx context.Context, rp entity.RolePer
 }
 
 func (r *rolePermissionRepository) Remove(ctx context.Context, roleID, permissionID uuid.UUID) error {
-	query := `DELETE FROM role_permissions WHERE role_id = $1 AND permission_id = $2`
-	_, err := r.db.ExecContext(ctx, query, roleID, permissionID)
+	q := sqlc.New(r.db)
+	err := q.RemoveRolePermission(ctx, sqlc.RemoveRolePermissionParams{
+		RoleID:       roleID,
+		PermissionID: permissionID,
+	})
 	if err != nil {
 		return fmt.Errorf("remove permission: %w", err)
 	}
@@ -37,44 +44,30 @@ func (r *rolePermissionRepository) Remove(ctx context.Context, roleID, permissio
 }
 
 func (r *rolePermissionRepository) GetByRoleID(ctx context.Context, roleID uuid.UUID) ([]entity.RolePermission, error) {
-	query := `SELECT role_id, permission_id FROM role_permissions WHERE role_id = $1`
-	rows, err := r.db.QueryContext(ctx, query, roleID)
+	q := sqlc.New(r.db)
+	rows, err := q.GetRolePermissionsByRoleID(ctx, roleID)
 	if err != nil {
 		return nil, fmt.Errorf("get role permissions: %w", err)
 	}
-	defer rows.Close()
-
-	var rps []entity.RolePermission
-	for rows.Next() {
-		var rp entity.RolePermission
-		if err := rows.Scan(&rp.RoleID, &rp.PermissionID); err != nil {
-			return nil, fmt.Errorf("scan role permission: %w", err)
+	rps := make([]entity.RolePermission, len(rows))
+	for i, row := range rows {
+		rps[i] = entity.RolePermission{
+			RoleID:       row.RoleID,
+			PermissionID: row.PermissionID,
 		}
-		rps = append(rps, rp)
 	}
 	return rps, nil
 }
 
 func (r *rolePermissionRepository) GetPermissionsByRoleID(ctx context.Context, roleID uuid.UUID) ([]*entity.Permission, error) {
-	query := `
-		SELECT p.id, p.name, p.description, p.resource, p.action, p.created_at, p.updated_at, p.deleted_at
-		FROM permissions p
-		JOIN role_permissions rp ON p.id = rp.permission_id
-		WHERE rp.role_id = $1 AND p.deleted_at IS NULL
-		ORDER BY p.created_at DESC`
-	rows, err := r.db.QueryContext(ctx, query, roleID)
+	q := sqlc.New(r.db)
+	rows, err := q.GetPermissionsByRoleID(ctx, roleID)
 	if err != nil {
 		return nil, fmt.Errorf("get permissions by role: %w", err)
 	}
-	defer rows.Close()
-
-	var perms []*entity.Permission
-	for rows.Next() {
-		perm := &entity.Permission{}
-		if err := rows.Scan(&perm.ID, &perm.Name, &perm.Description, &perm.Resource, &perm.Action, &perm.CreatedAt, &perm.UpdatedAt, &perm.DeletedAt); err != nil {
-			return nil, fmt.Errorf("scan permission: %w", err)
-		}
-		perms = append(perms, perm)
+	perms := make([]*entity.Permission, len(rows))
+	for i, row := range rows {
+		perms[i] = mapPermissionRowToEntity(row.ID, row.Name, row.Description, row.Resource, row.Action, row.CreatedAt, row.UpdatedAt, row.DeletedAt)
 	}
 	return perms, nil
 }

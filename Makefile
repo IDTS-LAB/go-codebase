@@ -1,7 +1,32 @@
-.PHONY: run build test lint fmt migrate-up migrate-down sqlc swagger docker-up docker-down clean rename
+.PHONY: run build test lint fmt migrate-up migrate-down sqlc swagger docker-up docker-down clean rename install-tools precommit install-hooks
 
 APP_NAME := go-codebase
 BUILD_DIR := bin
+
+GOINSTALL = go install
+
+GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null)
+GOIMPORTS := $(shell command -v goimports 2>/dev/null)
+GOOSE := $(shell command -v goose 2>/dev/null)
+SQLC := $(shell command -v sqlc 2>/dev/null)
+SWAG := $(shell command -v swag 2>/dev/null)
+
+install-tools:
+ifndef GOLANGCI_LINT
+	$(GOINSTALL) github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+endif
+ifndef GOIMPORTS
+	$(GOINSTALL) golang.org/x/tools/cmd/goimports@latest
+endif
+ifndef GOOSE
+	$(GOINSTALL) github.com/pressly/goose/v3/cmd/goose@latest
+endif
+ifndef SQLC
+	$(GOINSTALL) github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+endif
+ifndef SWAG
+	$(GOINSTALL) github.com/swaggo/swag/cmd/swag@latest
+endif
 
 run:
 	go run ./cmd/api
@@ -16,24 +41,44 @@ test-coverage:
 	go test -v -count=1 -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 
-lint:
+lint: install-tools
 	golangci-lint run ./...
 
-fmt:
+fmt: install-tools
 	go fmt ./...
 	goimports -w .
 
-migrate-up:
+migrate-up: install-tools
 	goose -dir migrations up
 
-migrate-down:
+migrate-down: install-tools
 	goose -dir migrations down
 
-sqlc:
+sqlc: install-tools
 	sqlc generate
 
-swagger:
+swagger: install-tools
 	swag init -g cmd/api/swagger.go -o docs --parseDependency --parseInternal
+
+precommit: install-tools mod-tidy
+	@echo "=== Checking formatting ==="
+	@if [ -n "$$(go fmt ./...)" ]; then \
+		echo "ERROR: Files not formatted. Run 'make fmt' and commit again."; \
+		exit 1; \
+	fi
+	@echo "=== Linting ==="
+	golangci-lint run ./...
+	@echo "=== Building ==="
+	go build ./...
+	@echo "=== Testing ==="
+	go test -count=1 ./...
+	@echo "=== All checks passed ==="
+
+install-hooks:
+	@echo "Installing pre-commit hook..."
+	@printf '#!/bin/sh\nmake -C "$(CURDIR)" precommit\n' > .git/hooks/pre-commit
+	@chmod +x .git/hooks/pre-commit
+	@echo "Pre-commit hook installed."
 
 docker-up:
 	docker compose up -d
@@ -43,6 +88,15 @@ docker-down:
 
 docker-build:
 	docker compose build
+
+docker-prod-up:
+	docker compose -f docker-compose.prod.yml up -d
+
+docker-prod-down:
+	docker compose -f docker-compose.prod.yml down
+
+docker-prod-migrate:
+	docker compose -f docker-compose.prod.yml --profile migrate run --rm migrate
 
 clean:
 	rm -rf $(BUILD_DIR) coverage.out coverage.html

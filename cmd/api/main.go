@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
@@ -10,23 +11,29 @@ import (
 	"time"
 
 	"github.com/IDTS-LAB/go-codebase/internal/authentication"
+	authEventBus "github.com/IDTS-LAB/go-codebase/internal/authentication/infrastructure/eventbus"
 	authHTTP "github.com/IDTS-LAB/go-codebase/internal/authentication/interfaces/http"
-	"github.com/IDTS-LAB/go-codebase/internal/authentication/application/service"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/infrastructure/casbin"
 	authzHTTP "github.com/IDTS-LAB/go-codebase/internal/authorization/interfaces/http"
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/auth"
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/cache"
+	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/email"
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/logger"
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/messaging"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/auditlog"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/config"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/database"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/events"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/router"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/telemetry"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/tenantfilter"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
+	"github.com/IDTS-LAB/go-codebase/internal/tenant"
+	tenantHTTP "github.com/IDTS-LAB/go-codebase/internal/tenant/interfaces/http"
 	"github.com/IDTS-LAB/go-codebase/internal/todo"
 	todoHTTP "github.com/IDTS-LAB/go-codebase/internal/todo/interfaces/http"
 	"github.com/IDTS-LAB/go-codebase/internal/user"
@@ -36,28 +43,37 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	cfg, err := config.New()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("load config: %w", err)
 	}
 
 	var (
-		authHandler  *authHTTP.Handler
-		todoHandler  *todoHTTP.Handler
-		authzHandler *authzHTTP.Handler
-		userHandler  *userHTTP.Handler
-		enforcer     *casbin.Enforcer
-		log          domain.Logger
-		rdb          *redis.Client
-		tokenSvc     domain.TokenService
-		errorRepo    *auditlog.Repository
+		authHandler   *authHTTP.Handler
+		todoHandler   *todoHTTP.Handler
+		authzHandler  *authzHTTP.Handler
+		userHandler   *userHTTP.Handler
+		tenantHandler *tenantHTTP.Handler
+		enforcer      *casbin.Enforcer
+		log           domain.Logger
+		db            *sql.DB
+		rdb           *redis.Client
+		tokenSvc      domain.TokenService
+		errorRepo     *auditlog.Repository
 	)
 
 	app := fx.New(
 		fx.Supply(cfg),
 
 		// Infrastructure
+		cqrs.Module,
 		logger.Module,
 		cache.Module,
 		auth.Module,
@@ -65,24 +81,25 @@ func main() {
 		database.Module,
 		telemetry.Module,
 		validator.Module,
+		email.Module,
 
 		// Modules
+		events.Module,
 		authentication.Module,
 		authorization.Module,
 		todo.Module,
 		user.Module,
+		tenant.Module,
 
 		// Shared
 		fx.Provide(auditlog.NewRepository),
+		fx.Provide(func(cfg *config.Config) *tenantfilter.Config {
+			return &tenantfilter.Config{Enabled: cfg.Tenant.Enabled}
+		}),
 
-		// Denylist helper
-		fx.Invoke(func(authSvc *service.AuthenticationService, rdb *redis.Client, cfg *config.Config) {
-			if cfg.Auth.TokenDenylist {
-				authSvc.SetDenylist(func(ctx context.Context, jti string, ttl time.Duration) error {
-					return rdb.Set(ctx, "token:blacklist:"+jti, "1", ttl).Err()
-				})
-			}
-			authSvc.SetLockoutConfig(cfg.Auth.MaxLoginAttempts, time.Duration(cfg.Auth.LockoutDuration)*time.Second)
+		// Event handlers
+		fx.Invoke(func(bus events.EventBus, eh *authEventBus.EmailHandler) {
+			eh.Register(bus)
 		}),
 
 		// Extract
@@ -90,8 +107,10 @@ func main() {
 		fx.Populate(&todoHandler),
 		fx.Populate(&authzHandler),
 		fx.Populate(&userHandler),
+		fx.Populate(&tenantHandler),
 		fx.Populate(&enforcer),
 		fx.Populate(&log),
+		fx.Populate(&db),
 		fx.Populate(&rdb),
 		fx.Populate(&tokenSvc),
 		fx.Populate(&errorRepo),
@@ -101,24 +120,25 @@ func main() {
 	defer cancel()
 
 	if err := app.Start(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to start app: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("start app: %w", err)
 	}
 
 	mw := middleware.NewRegistry(tokenSvc, rdb, cfg, log, errorRepo, enforcer)
 
 	root := router.NewRouter(router.Handlers{
-		Auth:  authHTTP.NewRouter(authHandler, mw.Auth),
-		Todo:  todoHTTP.NewRouter(todoHandler, mw.Auth, enforcer),
-		Authz: authzHTTP.NewRouter(authzHandler, mw.Auth, enforcer),
-		User:  userHTTP.NewRouter(userHandler, mw.Auth, enforcer),
-	}, mw, log, cfg)
+		Auth:   authHTTP.NewRouter(authHandler, mw.Auth),
+		Todo:   todoHTTP.NewRouter(todoHandler, mw.Auth, enforcer),
+		Authz:  authzHTTP.NewRouter(authzHandler, mw.Auth, enforcer),
+		User:   userHTTP.NewRouter(userHandler, mw.Auth, enforcer),
+		Tenant: tenantHTTP.NewRouter(tenantHandler, mw.Auth, enforcer),
+	}, mw, log, cfg, db)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
 		Handler:      root,
 		ReadTimeout:  time.Duration(cfg.Server.ReadTimeout) * time.Second,
 		WriteTimeout: time.Duration(cfg.Server.WriteTimeout) * time.Second,
+		IdleTimeout:  time.Duration(cfg.Server.IdleTimeout) * time.Second,
 	}
 
 	go func() {
@@ -131,16 +151,16 @@ func main() {
 
 	<-ctx.Done()
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutdownCancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to stop app: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("shutdown server: %w", err)
 	}
 
-	if err := app.Stop(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to stop app: %v\n", err)
-		os.Exit(1)
+	if err := app.Stop(context.Background()); err != nil {
+		return fmt.Errorf("stop app: %w", err)
 	}
+
+	return nil
 }

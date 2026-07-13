@@ -32,16 +32,17 @@ func AuditLog(repo *auditlog.Repository) func(http.Handler) http.Handler {
 			requestID := GetRequestID(r.Context())
 
 			entry := &auditlog.AuditLog{
-				ID:          uuid.New().String(),
-				RequestID:   requestID,
-				Method:      r.Method,
-				Path:        r.URL.Path,
-				StatusCode:  wrapped.statusCode,
-				DurationMs:  duration.Milliseconds(),
-				IP:          r.RemoteAddr,
-				UserAgent:   r.UserAgent(),
+				ID:           uuid.New().String(),
+				RequestID:    requestID,
+				Method:       r.Method,
+				Path:         r.URL.Path,
+				StatusCode:   wrapped.statusCode,
+				DurationMs:   duration.Milliseconds(),
+				IP:           r.RemoteAddr,
+				UserAgent:    r.UserAgent(),
 				ResponseSize: wrapped.bytesWritten,
-				CreatedAt:   time.Now(),
+				TenantID:     GetTenantID(r.Context()),
+				CreatedAt:    time.Now(),
 			}
 
 			if userID != "" {
