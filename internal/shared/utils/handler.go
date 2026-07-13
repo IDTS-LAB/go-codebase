@@ -41,3 +41,11 @@ func HandlePaginated(w http.ResponseWriter, data interface{}, page, perPage, tot
 	}
 	RespondPaginated(w, data, page, perPage, total)
 }
+
+func HandleCursorPaginated(w http.ResponseWriter, data interface{}, nextCursor, prevCursor *string, hasNext, hasPrev bool, limit int, err error) {
+	if err != nil {
+		MapError(w, err)
+		return
+	}
+	RespondCursorPaginated(w, data, nextCursor, prevCursor, hasNext, hasPrev, limit)
+}

@@ -11,7 +11,7 @@ import (
 type APIResponse struct {
 	Success bool            `json:"success"`
 	Data    interface{}     `json:"data"`
-	Meta    *PaginationMeta `json:"meta"`
+	Meta    interface{}     `json:"meta"`
 	Error   *ErrorBody      `json:"error,omitempty"`
 }
 
@@ -20,6 +20,14 @@ type PaginationMeta struct {
 	PerPage    int `json:"per_page"`
 	Total      int `json:"total"`
 	TotalPages int `json:"total_pages"`
+}
+
+type CursorMeta struct {
+	NextCursor *string `json:"next_cursor"`
+	PrevCursor *string `json:"prev_cursor"`
+	HasNext    bool    `json:"has_next"`
+	HasPrev    bool    `json:"has_prev"`
+	Limit      int     `json:"limit"`
 }
 
 type ErrorBody struct {
@@ -66,6 +74,20 @@ func RespondPaginated(w http.ResponseWriter, data interface{}, page, perPage, to
 			PerPage:    perPage,
 			Total:      total,
 			TotalPages: totalPages,
+		},
+	})
+}
+
+func RespondCursorPaginated(w http.ResponseWriter, data interface{}, nextCursor, prevCursor *string, hasNext, hasPrev bool, limit int) {
+	RespondJSON(w, http.StatusOK, APIResponse{
+		Success: true,
+		Data:    data,
+		Meta: CursorMeta{
+			NextCursor: nextCursor,
+			PrevCursor: prevCursor,
+			HasNext:    hasNext,
+			HasPrev:    hasPrev,
+			Limit:      limit,
 		},
 	})
 }

@@ -48,21 +48,37 @@ func ResponseFormatter() func(http.Handler) http.Handler {
 				return
 			}
 
-			var paginated struct {
-				Data       interface{} `json:"data"`
-				Pagination interface{} `json:"pagination"`
-			}
-			if json.Unmarshal(fw.body, &paginated) == nil && paginated.Data != nil && paginated.Pagination != nil {
-				var meta utils.PaginationMeta
-				metaBytes, _ := json.Marshal(paginated.Pagination)
-				json.Unmarshal(metaBytes, &meta)
-				json.NewEncoder(w).Encode(utils.APIResponse{
-					Success: true,
-					Data:    paginated.Data,
-					Meta:    &meta,
-				})
-				return
-			}
+		var paginated struct {
+			Data       interface{} `json:"data"`
+			Pagination interface{} `json:"pagination"`
+		}
+		if json.Unmarshal(fw.body, &paginated) == nil && paginated.Data != nil && paginated.Pagination != nil {
+			var meta utils.PaginationMeta
+			metaBytes, _ := json.Marshal(paginated.Pagination)
+			json.Unmarshal(metaBytes, &meta)
+			json.NewEncoder(w).Encode(utils.APIResponse{
+				Success: true,
+				Data:    paginated.Data,
+				Meta:    &meta,
+			})
+			return
+		}
+
+		var cursorResp struct {
+			Data interface{} `json:"data"`
+			Meta interface{} `json:"meta"`
+		}
+		if json.Unmarshal(fw.body, &cursorResp) == nil && cursorResp.Data != nil && cursorResp.Meta != nil {
+			var meta utils.CursorMeta
+			metaBytes, _ := json.Marshal(cursorResp.Meta)
+			json.Unmarshal(metaBytes, &meta)
+			json.NewEncoder(w).Encode(utils.APIResponse{
+				Success: true,
+				Data:    cursorResp.Data,
+				Meta:    &meta,
+			})
+			return
+		}
 
 			var raw interface{}
 			json.Unmarshal(fw.body, &raw)
