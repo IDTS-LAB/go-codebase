@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cursor"
 	"github.com/IDTS-LAB/go-codebase/internal/tenant/domain/entity"
 	"github.com/IDTS-LAB/go-codebase/internal/tenant/domain/repository"
 	"github.com/IDTS-LAB/go-codebase/internal/tenant/infrastructure/persistence/sqlc"
@@ -63,27 +64,65 @@ func (r *tenantRepository) GetBySlug(ctx context.Context, slug string) (*entity.
 	return &t, nil
 }
 
-func (r *tenantRepository) List(ctx context.Context, offset, limit int) ([]entity.Tenant, int, error) {
-	q := sqlc.New(r.db)
+func (r *tenantRepository) List(ctx context.Context, cursorArg *string, limit int) ([]entity.Tenant, *string, *string, bool, bool, error) {
+	args := []interface{}{}
+	nextPos := 1
+	query := "SELECT id, name, slug, domain, settings, is_active, created_at, updated_at FROM tenants"
 
-	total, err := q.CountTenants(ctx)
+	if cursorArg != nil {
+		c, err := cursor.Decode(*cursorArg)
+		if err != nil {
+			return nil, nil, nil, false, false, fmt.Errorf("invalid cursor: %w", err)
+		}
+		query += fmt.Sprintf(" WHERE (created_at, id) < ($%d, $%d)", nextPos, nextPos+1)
+		args = append(args, c.Timestamp, c.ID)
+		nextPos += 2
+	}
+
+	query += fmt.Sprintf(" ORDER BY created_at DESC, id DESC LIMIT $%d", nextPos)
+	dataArgs := append(args, limit+1)
+
+	rows, err := r.db.QueryContext(ctx, query, dataArgs...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("count tenants: %w", err)
+		return nil, nil, nil, false, false, fmt.Errorf("list tenants: %w", err)
+	}
+	defer rows.Close()
+
+	var tenants []entity.Tenant
+	for rows.Next() {
+		var t entity.Tenant
+		if err := rows.Scan(&t.ID, &t.Name, &t.Slug, &t.Domain, &t.Settings, &t.IsActive, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			return nil, nil, nil, false, false, fmt.Errorf("scan tenant: %w", err)
+		}
+		tenants = append(tenants, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, nil, false, false, fmt.Errorf("rows iteration: %w", err)
 	}
 
-	rows, err := q.ListTenants(ctx, sqlc.ListTenantsParams{
-		Limit:  int32(limit),
-		Offset: int32(offset),
-	})
-	if err != nil {
-		return nil, 0, fmt.Errorf("list tenants: %w", err)
+	hasNext := len(tenants) > limit
+	if hasNext {
+		tenants = tenants[:limit]
 	}
 
-	tenants := make([]entity.Tenant, len(rows))
-	for i, row := range rows {
-		tenants[i] = mapTenantToEntity(row)
+	var nextCursor *string
+	var prevCursor *string
+	if len(tenants) > 0 {
+		last := tenants[len(tenants)-1]
+		nc := cursor.Encode(last.CreatedAt, last.ID)
+		nextCursor = &nc
+
+		first := tenants[0]
+		pc := cursor.Encode(first.CreatedAt, first.ID)
+		prevCursor = &pc
 	}
-	return tenants, int(total), nil
+
+	hasPrev := cursorArg != nil
+	if hasPrev && len(tenants) == 0 {
+		hasPrev = false
+	}
+
+	return tenants, nextCursor, prevCursor, hasNext, hasPrev, nil
 }
 
 func (r *tenantRepository) Update(ctx context.Context, t *entity.Tenant) error {

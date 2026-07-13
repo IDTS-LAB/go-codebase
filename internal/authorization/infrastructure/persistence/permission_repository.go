@@ -10,6 +10,7 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/repository"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/infrastructure/persistence/sqlc"
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cursor"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/tenantfilter"
 	"github.com/google/uuid"
@@ -65,42 +66,35 @@ func (r *permissionRepository) GetByName(ctx context.Context, name string) (*ent
 	return mapPermissionRowToEntity(row.ID, row.Name, row.Description, row.Resource, row.Action, row.CreatedAt, row.UpdatedAt, row.DeletedAt), nil
 }
 
-func (r *permissionRepository) GetAll(ctx context.Context, offset, limit int) ([]*entity.Permission, int, error) {
-	var args []interface{}
-	countQuery := "SELECT COUNT(*) FROM permissions WHERE deleted_at IS NULL"
-	dataQuery := "SELECT id, name, description, resource, action, created_at, updated_at, deleted_at FROM permissions WHERE deleted_at IS NULL"
+func (r *permissionRepository) GetAll(ctx context.Context, cursorArg *string, limit int) ([]*entity.Permission, *string, *string, bool, bool, error) {
+	args := []interface{}{}
+	whereClause := "WHERE deleted_at IS NULL"
 
 	if r.tenantConfig != nil && r.tenantConfig.Enabled {
 		tenantID := middleware.GetTenantID(ctx)
 		if tenantID != "" {
-			countQuery += " AND tenant_id = $1"
-			dataQuery += " AND tenant_id = $1"
+			whereClause += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
 			args = append(args, tenantID)
 		}
 	}
 
-	var total int64
-	var err error
-	if len(args) > 0 {
-		err = r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
-	} else {
-		err = r.db.QueryRowContext(ctx, countQuery).Scan(&total)
-	}
-	if err != nil {
-		return nil, 0, fmt.Errorf("count permissions: %w", err)
-	}
-
-	if len(args) > 0 {
-		dataQuery += " ORDER BY created_at DESC LIMIT $2 OFFSET $3"
-		args = append(args, limit, offset)
-	} else {
-		dataQuery += " ORDER BY created_at DESC LIMIT $1 OFFSET $2"
-		args = append(args, limit, offset)
+	nextPos := len(args) + 1
+	if cursorArg != nil {
+		c, err := cursor.Decode(*cursorArg)
+		if err != nil {
+			return nil, nil, nil, false, false, fmt.Errorf("invalid cursor: %w", err)
+		}
+		whereClause += fmt.Sprintf(" AND (created_at, id) < ($%d, $%d)", nextPos, nextPos+1)
+		args = append(args, c.Timestamp, c.ID)
+		nextPos += 2
 	}
 
-	rows, err := r.db.QueryContext(ctx, dataQuery, args...)
+	dataQuery := fmt.Sprintf("SELECT id, name, description, resource, action, created_at, updated_at, deleted_at FROM permissions %s ORDER BY created_at DESC, id DESC LIMIT $%d", whereClause, nextPos)
+	dataArgs := append(args, limit+1)
+
+	rows, err := r.db.QueryContext(ctx, dataQuery, dataArgs...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("query permissions: %w", err)
+		return nil, nil, nil, false, false, fmt.Errorf("query permissions: %w", err)
 	}
 	defer rows.Close()
 
@@ -109,7 +103,7 @@ func (r *permissionRepository) GetAll(ctx context.Context, offset, limit int) ([
 		var p entity.Permission
 		var deletedAt sql.NullTime
 		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Resource, &p.Action, &p.CreatedAt, &p.UpdatedAt, &deletedAt); err != nil {
-			return nil, 0, fmt.Errorf("scan permission: %w", err)
+			return nil, nil, nil, false, false, fmt.Errorf("scan permission: %w", err)
 		}
 		if deletedAt.Valid {
 			p.DeletedAt = &deletedAt.Time
@@ -117,10 +111,32 @@ func (r *permissionRepository) GetAll(ctx context.Context, offset, limit int) ([
 		perms = append(perms, &p)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("rows iteration: %w", err)
+		return nil, nil, nil, false, false, fmt.Errorf("rows iteration: %w", err)
 	}
 
-	return perms, int(total), nil
+	hasNext := len(perms) > limit
+	if hasNext {
+		perms = perms[:limit]
+	}
+
+	var nextCursor *string
+	var prevCursor *string
+	if len(perms) > 0 {
+		last := perms[len(perms)-1]
+		nc := cursor.Encode(last.CreatedAt, last.ID)
+		nextCursor = &nc
+
+		first := perms[0]
+		pc := cursor.Encode(first.CreatedAt, first.ID)
+		prevCursor = &pc
+	}
+
+	hasPrev := cursorArg != nil
+	if hasPrev && len(perms) == 0 {
+		hasPrev = false
+	}
+
+	return perms, nextCursor, prevCursor, hasNext, hasPrev, nil
 }
 
 func (r *permissionRepository) Update(ctx context.Context, perm *entity.Permission) error {

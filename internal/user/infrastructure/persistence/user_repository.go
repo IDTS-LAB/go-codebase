@@ -8,6 +8,7 @@ import (
 
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/entity"
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cursor"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/tenantfilter"
 	"github.com/IDTS-LAB/go-codebase/internal/user/domain/repository"
@@ -24,42 +25,35 @@ func NewUserRepository(db *sql.DB, tenantConfig *tenantfilter.Config) repository
 	return &userRepository{db: db, tenantConfig: tenantConfig}
 }
 
-func (r *userRepository) List(ctx context.Context, offset, limit int) ([]*entity.User, int, error) {
-	var args []interface{}
-	countQuery := "SELECT COUNT(*) FROM users WHERE deleted_at IS NULL"
-	dataQuery := "SELECT u.id, u.email, u.name, u.is_active, u.created_at, u.updated_at, u.deleted_at FROM users u WHERE u.deleted_at IS NULL"
+func (r *userRepository) List(ctx context.Context, cursorArg *string, limit int) ([]*entity.User, *string, *string, bool, bool, error) {
+	args := []interface{}{}
+	whereClause := "WHERE u.deleted_at IS NULL"
 
 	if r.tenantConfig != nil && r.tenantConfig.Enabled {
 		tenantID := middleware.GetTenantID(ctx)
 		if tenantID != "" {
-			countQuery += " AND u.tenant_id = $1"
-			dataQuery += " AND u.tenant_id = $1"
+			whereClause += fmt.Sprintf(" AND u.tenant_id = $%d", len(args)+1)
 			args = append(args, tenantID)
 		}
 	}
 
-	var total int64
-	var err error
-	if len(args) > 0 {
-		err = r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
-	} else {
-		err = r.db.QueryRowContext(ctx, countQuery).Scan(&total)
-	}
-	if err != nil {
-		return nil, 0, fmt.Errorf("count users: %w", err)
-	}
-
-	if len(args) > 0 {
-		dataQuery += " ORDER BY u.created_at DESC LIMIT $2 OFFSET $3"
-		args = append(args, limit, offset)
-	} else {
-		dataQuery += " ORDER BY u.created_at DESC LIMIT $1 OFFSET $2"
-		args = append(args, limit, offset)
+	nextPos := len(args) + 1
+	if cursorArg != nil {
+		c, err := cursor.Decode(*cursorArg)
+		if err != nil {
+			return nil, nil, nil, false, false, fmt.Errorf("invalid cursor: %w", err)
+		}
+		whereClause += fmt.Sprintf(" AND (u.created_at, u.id) < ($%d, $%d)", nextPos, nextPos+1)
+		args = append(args, c.Timestamp, c.ID)
+		nextPos += 2
 	}
 
-	rows, err := r.db.QueryContext(ctx, dataQuery, args...)
+	dataQuery := fmt.Sprintf("SELECT u.id, u.email, u.name, u.is_active, u.created_at, u.updated_at, u.deleted_at FROM users u %s ORDER BY u.created_at DESC, u.id DESC LIMIT $%d", whereClause, nextPos)
+	dataArgs := append(args, limit+1)
+
+	rows, err := r.db.QueryContext(ctx, dataQuery, dataArgs...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("list users: %w", err)
+		return nil, nil, nil, false, false, fmt.Errorf("list users: %w", err)
 	}
 	defer rows.Close()
 
@@ -68,7 +62,7 @@ func (r *userRepository) List(ctx context.Context, offset, limit int) ([]*entity
 		var u entity.User
 		var deletedAt sql.NullTime
 		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.IsActive, &u.CreatedAt, &u.UpdatedAt, &deletedAt); err != nil {
-			return nil, 0, fmt.Errorf("scan user: %w", err)
+			return nil, nil, nil, false, false, fmt.Errorf("scan user: %w", err)
 		}
 		if deletedAt.Valid {
 			u.DeletedAt = &deletedAt.Time
@@ -76,10 +70,32 @@ func (r *userRepository) List(ctx context.Context, offset, limit int) ([]*entity
 		users = append(users, &u)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("rows iteration: %w", err)
+		return nil, nil, nil, false, false, fmt.Errorf("rows iteration: %w", err)
 	}
 
-	return users, int(total), nil
+	hasNext := len(users) > limit
+	if hasNext {
+		users = users[:limit]
+	}
+
+	var nextCursor *string
+	var prevCursor *string
+	if len(users) > 0 {
+		last := users[len(users)-1]
+		nc := cursor.Encode(last.CreatedAt, last.ID)
+		nextCursor = &nc
+
+		first := users[0]
+		pc := cursor.Encode(first.CreatedAt, first.ID)
+		prevCursor = &pc
+	}
+
+	hasPrev := cursorArg != nil
+	if hasPrev && len(users) == 0 {
+		hasPrev = false
+	}
+
+	return users, nextCursor, prevCursor, hasNext, hasPrev, nil
 }
 
 func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.User, error) {

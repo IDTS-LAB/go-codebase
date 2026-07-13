@@ -10,6 +10,7 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/domain/repository"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/infrastructure/persistence/sqlc"
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/cursor"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/tenantfilter"
 	"github.com/google/uuid"
@@ -63,42 +64,35 @@ func (r *roleRepository) GetByName(ctx context.Context, name string) (*entity.Ro
 	return mapRoleRowToEntity(row.ID, row.Name, row.Description, row.CreatedAt, row.UpdatedAt, row.DeletedAt), nil
 }
 
-func (r *roleRepository) GetAll(ctx context.Context, offset, limit int) ([]*entity.Role, int, error) {
-	var args []interface{}
-	countQuery := "SELECT COUNT(*) FROM roles WHERE deleted_at IS NULL"
-	dataQuery := "SELECT id, name, description, created_at, updated_at, deleted_at FROM roles WHERE deleted_at IS NULL"
+func (r *roleRepository) GetAll(ctx context.Context, cursorArg *string, limit int) ([]*entity.Role, *string, *string, bool, bool, error) {
+	args := []interface{}{}
+	whereClause := "WHERE deleted_at IS NULL"
 
 	if r.tenantConfig != nil && r.tenantConfig.Enabled {
 		tenantID := middleware.GetTenantID(ctx)
 		if tenantID != "" {
-			countQuery += " AND tenant_id = $1"
-			dataQuery += " AND tenant_id = $1"
+			whereClause += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
 			args = append(args, tenantID)
 		}
 	}
 
-	var total int64
-	var err error
-	if len(args) > 0 {
-		err = r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
-	} else {
-		err = r.db.QueryRowContext(ctx, countQuery).Scan(&total)
-	}
-	if err != nil {
-		return nil, 0, fmt.Errorf("count roles: %w", err)
-	}
-
-	if len(args) > 0 {
-		dataQuery += " ORDER BY created_at DESC LIMIT $2 OFFSET $3"
-		args = append(args, limit, offset)
-	} else {
-		dataQuery += " ORDER BY created_at DESC LIMIT $1 OFFSET $2"
-		args = append(args, limit, offset)
+	nextPos := len(args) + 1
+	if cursorArg != nil {
+		c, err := cursor.Decode(*cursorArg)
+		if err != nil {
+			return nil, nil, nil, false, false, fmt.Errorf("invalid cursor: %w", err)
+		}
+		whereClause += fmt.Sprintf(" AND (created_at, id) < ($%d, $%d)", nextPos, nextPos+1)
+		args = append(args, c.Timestamp, c.ID)
+		nextPos += 2
 	}
 
-	rows, err := r.db.QueryContext(ctx, dataQuery, args...)
+	dataQuery := fmt.Sprintf("SELECT id, name, description, created_at, updated_at, deleted_at FROM roles %s ORDER BY created_at DESC, id DESC LIMIT $%d", whereClause, nextPos)
+	dataArgs := append(args, limit+1)
+
+	rows, err := r.db.QueryContext(ctx, dataQuery, dataArgs...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("query roles: %w", err)
+		return nil, nil, nil, false, false, fmt.Errorf("query roles: %w", err)
 	}
 	defer rows.Close()
 
@@ -107,7 +101,7 @@ func (r *roleRepository) GetAll(ctx context.Context, offset, limit int) ([]*enti
 		var rl entity.Role
 		var deletedAt sql.NullTime
 		if err := rows.Scan(&rl.ID, &rl.Name, &rl.Description, &rl.CreatedAt, &rl.UpdatedAt, &deletedAt); err != nil {
-			return nil, 0, fmt.Errorf("scan role: %w", err)
+			return nil, nil, nil, false, false, fmt.Errorf("scan role: %w", err)
 		}
 		if deletedAt.Valid {
 			rl.DeletedAt = &deletedAt.Time
@@ -115,10 +109,32 @@ func (r *roleRepository) GetAll(ctx context.Context, offset, limit int) ([]*enti
 		roles = append(roles, &rl)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("rows iteration: %w", err)
+		return nil, nil, nil, false, false, fmt.Errorf("rows iteration: %w", err)
 	}
 
-	return roles, int(total), nil
+	hasNext := len(roles) > limit
+	if hasNext {
+		roles = roles[:limit]
+	}
+
+	var nextCursor *string
+	var prevCursor *string
+	if len(roles) > 0 {
+		last := roles[len(roles)-1]
+		nc := cursor.Encode(last.CreatedAt, last.ID)
+		nextCursor = &nc
+
+		first := roles[0]
+		pc := cursor.Encode(first.CreatedAt, first.ID)
+		prevCursor = &pc
+	}
+
+	hasPrev := cursorArg != nil
+	if hasPrev && len(roles) == 0 {
+		hasPrev = false
+	}
+
+	return roles, nextCursor, prevCursor, hasNext, hasPrev, nil
 }
 
 func (r *roleRepository) Update(ctx context.Context, role *entity.Role) error {
