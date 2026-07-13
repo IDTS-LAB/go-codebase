@@ -43,8 +43,8 @@ func (s *TodoDomainService) GetTodo(ctx context.Context, id uuid.UUID) (*entity.
 	return todo, nil
 }
 
-func (s *TodoDomainService) ListTodos(ctx context.Context, offset, limit int) ([]*entity.Todo, int, error) {
-	return s.repo.GetAll(ctx, offset, limit)
+func (s *TodoDomainService) ListTodos(ctx context.Context, cursor *string, limit int) ([]*entity.Todo, *string, *string, bool, bool, error) {
+	return s.repo.GetAll(ctx, cursor, limit)
 }
 
 func (s *TodoDomainService) UpdateTodo(ctx context.Context, id uuid.UUID, title, description string) (*entity.Todo, error) {
@@ -85,6 +85,6 @@ func (s *TodoDomainService) CompleteTodo(ctx context.Context, id uuid.UUID) (*en
 	return todo, nil
 }
 
-func (s *TodoDomainService) SearchTodos(ctx context.Context, query string, offset, limit int) ([]*entity.Todo, int, error) {
-	return s.repo.Search(ctx, query, offset, limit)
+func (s *TodoDomainService) SearchTodos(ctx context.Context, query string, cursor *string, limit int) ([]*entity.Todo, *string, *string, bool, bool, error) {
+	return s.repo.Search(ctx, query, cursor, limit)
 }

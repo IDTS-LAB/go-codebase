@@ -6,6 +6,7 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/config"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
+	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -20,6 +21,8 @@ type Handlers struct {
 }
 
 func NewRouter(h Handlers, mw middleware.Registry, log domain.Logger, cfg *config.Config, db *sql.DB) *chi.Mux {
+	utils.IsProduction = cfg.App.Env == "production"
+
 	r := chi.NewRouter()
 
 	r.Use(mw.Tracing)

@@ -93,5 +93,6 @@ func TestResponseFormatter_UnwrapsPaginatedPayload(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, resp.Success)
 	assert.NotNil(t, resp.Meta)
-	assert.Equal(t, 1, resp.Meta.Page)
+	meta := resp.Meta.(map[string]interface{})
+	assert.Equal(t, float64(1), meta["page"])
 }

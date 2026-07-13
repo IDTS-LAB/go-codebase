@@ -70,18 +70,22 @@ func userToResponse(user *authEntity.User) UserResponse {
 // @Security BearerAuth
 // @Router /users [get]
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	if limit <= 0 || limit > 100 {
-		limit = 20
-	}
-	if offset < 0 {
-		offset = 0
+	cursorStr := r.URL.Query().Get("cursor")
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
 	}
 
-	resp, err := h.queryBus.Ask(r.Context(), query.ListUsersQuery{Offset: offset, Limit: limit})
+	var cursor *string
+	if cursorStr != "" {
+		cursor = &cursorStr
+	}
+
+	resp, err := h.queryBus.Ask(r.Context(), query.ListUsersQuery{Cursor: cursor, Limit: limit})
 	if err != nil {
-		utils.HandlePaginated(w, nil, 0, 0, 0, err)
+		utils.MapErrorFromRequest(w, r, err)
 		return
 	}
 
@@ -91,11 +95,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		usersResp[i] = userToResponse(u)
 	}
 
-	page := 1
-	if limit > 0 {
-		page = offset/limit + 1
-	}
-	utils.RespondPaginated(w, usersResp, page, limit, result.Total)
+	utils.RespondCursorPaginated(w, usersResp, result.NextCursor, result.PrevCursor, result.HasNext, result.HasPrev, result.Limit)
 }
 
 // Get godoc

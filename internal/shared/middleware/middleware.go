@@ -74,8 +74,17 @@ func ErrorRecorder(log domain.Logger, errorRepo *auditlog.Repository) func(http.
 						span.RecordError(fmt.Errorf("%s", wrapped.errMsg))
 					}
 				}
-				persistError(r, errorRepo, log, wrapped.statusCode,
-					http.StatusText(wrapped.statusCode), wrapped.errMsg, wrapped.stack)
+
+				msg := http.StatusText(wrapped.statusCode)
+				errMsg := wrapped.errMsg
+				stack := wrapped.stack
+				if info, ok := utils.GetErrorInfo(ctx); ok && info.Err != nil {
+					msg = info.Err.Error()
+					errMsg = info.Err.Error()
+					stack = info.Stack
+				}
+
+				persistError(r, errorRepo, log, wrapped.statusCode, msg, errMsg, stack)
 			}
 		})
 	}

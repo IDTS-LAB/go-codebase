@@ -1,81 +1,148 @@
 package casbin
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
-	"github.com/google/uuid"
+	"github.com/casbin/casbin/v2/model"
+	"github.com/casbin/casbin/v2/persist"
 )
 
-type Policy struct {
-	Subject string
-	Object  string
-	Action  string
-}
-
-type PolicyLoader struct {
+type Adapter struct {
 	db *sql.DB
 }
 
-func NewPolicyLoader(db *sql.DB) *PolicyLoader {
-	return &PolicyLoader{db: db}
+func NewAdapter(db *sql.DB) *Adapter {
+	return &Adapter{db: db}
 }
 
-func (l *PolicyLoader) LoadAllPolicies(ctx context.Context) ([]Policy, error) {
-	query := `
-		SELECT
-			ur.user_id::text,
-			p.resource,
-			p.action
-		FROM user_roles ur
-		JOIN role_permissions rp ON ur.role_id = rp.role_id
-		JOIN permissions p ON rp.permission_id = p.id
-		JOIN roles r ON ur.role_id = r.id
-		WHERE r.deleted_at IS NULL AND p.deleted_at IS NULL`
-
-	rows, err := l.db.QueryContext(ctx, query)
+func (a *Adapter) LoadPolicy(model model.Model) error {
+	rows, err := a.db.Query(`SELECT ptype, v0, v1, v2, v3, v4, v5 FROM casbin_rule`)
 	if err != nil {
-		return nil, fmt.Errorf("load policies: %w", err)
+		return fmt.Errorf("load policy: %w", err)
 	}
 	defer rows.Close()
 
-	var policies []Policy
 	for rows.Next() {
-		var pol Policy
-		if err := rows.Scan(&pol.Subject, &pol.Object, &pol.Action); err != nil {
-			return nil, fmt.Errorf("scan policy: %w", err)
+		var ptype string
+		var v0, v1, v2, v3, v4, v5 string
+		if err := rows.Scan(&ptype, &v0, &v1, &v2, &v3, &v4, &v5); err != nil {
+			return fmt.Errorf("scan policy: %w", err)
 		}
-		policies = append(policies, pol)
+		line := ptype + ", " + v0 + ", " + v1 + ", " + v2 + ", " + v3 + ", " + v4 + ", " + v5
+		line = strings.TrimRight(line, ", ")
+		if err := persist.LoadPolicyLine(line, model); err != nil {
+			return fmt.Errorf("load policy line: %w", err)
+		}
 	}
-	return policies, nil
+	return rows.Err()
 }
 
-func (l *PolicyLoader) LoadUserPolicies(ctx context.Context, userID uuid.UUID) ([]Policy, error) {
-	query := `
-		SELECT
-			ur.user_id::text,
-			p.resource,
-			p.action
-		FROM user_roles ur
-		JOIN role_permissions rp ON ur.role_id = rp.role_id
-		JOIN permissions p ON rp.permission_id = p.id
-		JOIN roles r ON ur.role_id = r.id
-		WHERE ur.user_id = $1 AND r.deleted_at IS NULL AND p.deleted_at IS NULL`
-
-	rows, err := l.db.QueryContext(ctx, query, userID)
+func (a *Adapter) SavePolicy(model model.Model) error {
+	tx, err := a.db.Begin()
 	if err != nil {
-		return nil, fmt.Errorf("load user policies: %w", err)
+		return fmt.Errorf("save policy begin tx: %w", err)
 	}
-	defer rows.Close()
+	defer tx.Rollback()
 
-	var policies []Policy
-	for rows.Next() {
-		var pol Policy
-		if err := rows.Scan(&pol.Subject, &pol.Object, &pol.Action); err != nil {
-			return nil, fmt.Errorf("scan policy: %w", err)
-		}
-		policies = append(policies, pol)
+	if _, err := tx.Exec(`DELETE FROM casbin_rule`); err != nil {
+		return fmt.Errorf("save policy delete: %w", err)
 	}
-	return policies, nil
+
+	stmt, err := tx.Prepare(`INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ($1, $2, $3, $4, $5, $6, $7)`)
+	if err != nil {
+		return fmt.Errorf("save policy prepare: %w", err)
+	}
+	defer stmt.Close()
+
+	for ptype, assertion := range model["p"] {
+		for _, rule := range assertion.Policy {
+			values := []interface{}{ptype}
+			ruleParts := rule
+			for len(ruleParts) < 6 {
+				ruleParts = append(ruleParts, "")
+			}
+			for _, p := range ruleParts {
+				values = append(values, p)
+			}
+			if _, err := stmt.Exec(values...); err != nil {
+				return fmt.Errorf("save policy insert: %w", err)
+			}
+		}
+	}
+
+	for ptype, assertion := range model["g"] {
+		for _, rule := range assertion.Policy {
+			values := []interface{}{ptype}
+			ruleParts := rule
+			for len(ruleParts) < 6 {
+				ruleParts = append(ruleParts, "")
+			}
+			for _, p := range ruleParts {
+				values = append(values, p)
+			}
+			if _, err := stmt.Exec(values...); err != nil {
+				return fmt.Errorf("save policy insert g: %w", err)
+			}
+		}
+	}
+
+	return tx.Commit()
 }
+
+func (a *Adapter) AddPolicy(sec string, ptype string, rule []string) error {
+	values := []interface{}{ptype}
+	for _, v := range rule {
+		values = append(values, v)
+	}
+	for len(values) < 8 {
+		values = append(values, "")
+	}
+
+	_, err := a.db.Exec(
+		`INSERT INTO casbin_rule (ptype, v0, v1, v2, v3, v4, v5) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		values...,
+	)
+	if err != nil {
+		return fmt.Errorf("add policy: %w", err)
+	}
+	return nil
+}
+
+func (a *Adapter) RemovePolicy(sec string, ptype string, rule []string) error {
+	query := `DELETE FROM casbin_rule WHERE ptype = $1`
+	args := []interface{}{ptype}
+	for i, v := range rule {
+		query += fmt.Sprintf(" AND v%d = $%d", i, i+2)
+		args = append(args, v)
+	}
+
+	_, err := a.db.Exec(query, args...)
+	if err != nil {
+		return fmt.Errorf("remove policy: %w", err)
+	}
+	return nil
+}
+
+func (a *Adapter) RemoveFilteredPolicy(sec string, ptype string, fieldIndex int, fieldValues ...string) error {
+	query := `DELETE FROM casbin_rule WHERE ptype = $1`
+	args := []interface{}{ptype}
+
+	for i, v := range fieldValues {
+		if v == "" {
+			continue
+		}
+		col := fieldIndex + i
+		query += fmt.Sprintf(" AND v%d = $%d", col, len(args)+1)
+		args = append(args, v)
+	}
+
+	_, err := a.db.Exec(query, args...)
+	if err != nil {
+		return fmt.Errorf("remove filtered policy: %w", err)
+	}
+	return nil
+}
+
+var _ persist.Adapter = (*Adapter)(nil)

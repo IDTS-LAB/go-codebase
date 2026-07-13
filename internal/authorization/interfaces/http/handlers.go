@@ -2,8 +2,8 @@ package http
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/dto"
@@ -67,20 +67,26 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 // @Security BearerAuth
 // @Router /auth/sessions/roles [get]
 func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
-	page, perPage := 1, 20
-	if p := r.URL.Query().Get("page"); p != "" {
-		fmt.Sscanf(p, "%d", &page)
+	cursorStr := r.URL.Query().Get("cursor")
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
 	}
-	if pp := r.URL.Query().Get("per_page"); pp != "" {
-		fmt.Sscanf(pp, "%d", &perPage)
+
+	var cursor *string
+	if cursorStr != "" {
+		cursor = &cursorStr
 	}
-	resp, err := h.queryBus.Ask(r.Context(), query.ListRolesQuery{Page: page, PerPage: perPage})
+
+	resp, err := h.queryBus.Ask(r.Context(), query.ListRolesQuery{Cursor: cursor, Limit: limit})
 	if err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
 	result := resp.(query.ListRolesResult)
-	utils.HandlePaginated(w, result.Roles, page, perPage, result.Total, nil)
+	utils.RespondCursorPaginated(w, result.Roles, result.NextCursor, result.PrevCursor, result.HasNext, result.HasPrev, limit)
 }
 
 // GetRole godoc
@@ -197,20 +203,26 @@ func (h *Handler) CreatePermission(w http.ResponseWriter, r *http.Request) {
 // @Security BearerAuth
 // @Router /auth/sessions/permissions [get]
 func (h *Handler) ListPermissions(w http.ResponseWriter, r *http.Request) {
-	page, perPage := 1, 20
-	if p := r.URL.Query().Get("page"); p != "" {
-		fmt.Sscanf(p, "%d", &page)
+	cursorStr := r.URL.Query().Get("cursor")
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
 	}
-	if pp := r.URL.Query().Get("per_page"); pp != "" {
-		fmt.Sscanf(pp, "%d", &perPage)
+
+	var cursor *string
+	if cursorStr != "" {
+		cursor = &cursorStr
 	}
-	resp, err := h.queryBus.Ask(r.Context(), query.ListPermissionsQuery{Page: page, PerPage: perPage})
+
+	resp, err := h.queryBus.Ask(r.Context(), query.ListPermissionsQuery{Cursor: cursor, Limit: limit})
 	if err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
 	result := resp.(query.ListPermissionsResult)
-	utils.HandlePaginated(w, result.Permissions, page, perPage, result.Total, nil)
+	utils.RespondCursorPaginated(w, result.Permissions, result.NextCursor, result.PrevCursor, result.HasNext, result.HasPrev, limit)
 }
 
 // GetPermission godoc

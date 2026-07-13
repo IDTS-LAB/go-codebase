@@ -8,13 +8,17 @@ import (
 )
 
 type ListUsersQuery struct {
-	Offset int
+	Cursor *string
 	Limit  int
 }
 
 type ListUsersResult struct {
-	Users []*authEntity.User
-	Total int
+	Users      []*authEntity.User
+	NextCursor *string
+	PrevCursor *string
+	HasNext    bool
+	HasPrev    bool
+	Limit      int
 }
 
 type ListUsersHandler struct {
@@ -27,9 +31,16 @@ func NewListUsersHandler(repo repository.UserRepository) *ListUsersHandler {
 
 func (h *ListUsersHandler) Handle(ctx context.Context, query any) (any, error) {
 	q := query.(ListUsersQuery)
-	users, total, err := h.repo.List(ctx, q.Offset, q.Limit)
+	users, nextCursor, prevCursor, hasNext, hasPrev, err := h.repo.List(ctx, q.Cursor, q.Limit)
 	if err != nil {
 		return nil, err
 	}
-	return ListUsersResult{Users: users, Total: total}, nil
+	return ListUsersResult{
+		Users:      users,
+		NextCursor: nextCursor,
+		PrevCursor: prevCursor,
+		HasNext:    hasNext,
+		HasPrev:    hasPrev,
+		Limit:      q.Limit,
+	}, nil
 }

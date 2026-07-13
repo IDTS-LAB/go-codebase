@@ -28,6 +28,10 @@ type TenantResponse struct {
 }
 
 type TenantListResponse struct {
-	Tenants []TenantResponse `json:"tenants"`
-	Total   int              `json:"total"`
+	Tenants    []TenantResponse `json:"tenants"`
+	NextCursor *string          `json:"next_cursor,omitempty"`
+	PrevCursor *string          `json:"prev_cursor,omitempty"`
+	HasNext    bool             `json:"has_next"`
+	HasPrev    bool             `json:"has_prev"`
+	Limit      int              `json:"limit"`
 }

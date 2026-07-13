@@ -3,8 +3,8 @@ package http
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
@@ -74,24 +74,26 @@ func (h *Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
 // @Security BearerAuth
 // @Router /todos [get]
 func (h *Handler) ListTodos(w http.ResponseWriter, r *http.Request) {
-	page := 1
-	perPage := 20
-	if p := r.URL.Query().Get("page"); p != "" {
-		fmt.Sscanf(p, "%d", &page)
+	cursorStr := r.URL.Query().Get("cursor")
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
 	}
-	if pp := r.URL.Query().Get("per_page"); pp != "" {
-		fmt.Sscanf(pp, "%d", &perPage)
+
+	var cursor *string
+	if cursorStr != "" {
+		cursor = &cursorStr
 	}
-	if perPage > 100 {
-		perPage = 100
-	}
-	resp, err := h.queryBus.Ask(r.Context(), query.ListTodosQuery{Page: page, PerPage: perPage})
+
+	resp, err := h.queryBus.Ask(r.Context(), query.ListTodosQuery{Cursor: cursor, Limit: limit})
 	if err != nil {
-		utils.HandlePaginated(w, nil, 0, 0, 0, err)
+		utils.MapErrorFromRequest(w, r, err)
 		return
 	}
-	result := resp.(dto.TodoListResponse)
-	utils.RespondPaginated(w, result.Todos, page, perPage, result.Total)
+	result := resp.(query.ListTodosResult)
+	utils.RespondCursorPaginated(w, result.Todos, result.NextCursor, result.PrevCursor, result.HasNext, result.HasPrev, result.Limit)
 }
 
 // GetTodo godoc
@@ -220,7 +222,7 @@ func (h *Handler) CompleteTodo(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, service.ErrTodoAlreadyDone):
 			utils.RespondConflict(w, "todo is already completed")
 		default:
-			utils.MapError(w, err)
+			utils.MapErrorFromRequest(w, r, err)
 		}
 		return
 	}
@@ -246,19 +248,24 @@ func (h *Handler) SearchTodos(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, "search query is required")
 		return
 	}
-	page := 1
-	perPage := 20
-	if p := r.URL.Query().Get("page"); p != "" {
-		fmt.Sscanf(p, "%d", &page)
+	cursorStr := r.URL.Query().Get("cursor")
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
 	}
-	if pp := r.URL.Query().Get("per_page"); pp != "" {
-		fmt.Sscanf(pp, "%d", &perPage)
+
+	var cursor *string
+	if cursorStr != "" {
+		cursor = &cursorStr
 	}
-	resp, err := h.queryBus.Ask(r.Context(), query.SearchTodosQuery{Query: queryStr, Page: page, PerPage: perPage})
+
+	resp, err := h.queryBus.Ask(r.Context(), query.SearchTodosQuery{Query: queryStr, Cursor: cursor, Limit: limit})
 	if err != nil {
-		utils.HandlePaginated(w, nil, 0, 0, 0, err)
+		utils.MapErrorFromRequest(w, r, err)
 		return
 	}
-	result := resp.(dto.TodoListResponse)
-	utils.RespondPaginated(w, result.Todos, page, perPage, result.Total)
+	result := resp.(query.SearchTodosResult)
+	utils.RespondCursorPaginated(w, result.Todos, result.NextCursor, result.PrevCursor, result.HasNext, result.HasPrev, result.Limit)
 }

@@ -3,8 +3,8 @@ package http
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
@@ -51,24 +51,26 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	page := 1
-	perPage := 20
-	if p := r.URL.Query().Get("page"); p != "" {
-		fmt.Sscanf(p, "%d", &page)
+	cursorStr := r.URL.Query().Get("cursor")
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
 	}
-	if pp := r.URL.Query().Get("per_page"); pp != "" {
-		fmt.Sscanf(pp, "%d", &perPage)
+
+	var cursor *string
+	if cursorStr != "" {
+		cursor = &cursorStr
 	}
-	if perPage > 100 {
-		perPage = 100
-	}
-	resp, err := h.queryBus.Ask(r.Context(), query.ListTenantsQuery{Page: page, PerPage: perPage})
+
+	resp, err := h.queryBus.Ask(r.Context(), query.ListTenantsQuery{Cursor: cursor, Limit: limit})
 	if err != nil {
-		utils.HandlePaginated(w, nil, 0, 0, 0, err)
+		utils.MapErrorFromRequest(w, r, err)
 		return
 	}
 	listResp := resp.(dto.TenantListResponse)
-	utils.HandlePaginated(w, listResp.Tenants, page, perPage, listResp.Total, nil)
+	utils.RespondCursorPaginated(w, listResp.Tenants, listResp.NextCursor, listResp.PrevCursor, listResp.HasNext, listResp.HasPrev, listResp.Limit)
 }
 
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {

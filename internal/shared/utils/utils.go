@@ -4,15 +4,19 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"runtime/debug"
 
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 )
 
+var IsProduction bool
+
 type APIResponse struct {
 	Success bool            `json:"success"`
-	Data    interface{}     `json:"data"`
-	Meta    interface{}     `json:"meta"`
+	Data    interface{}     `json:"data,omitempty"`
+	Meta    interface{}     `json:"meta,omitempty"`
 	Error   *ErrorBody      `json:"error,omitempty"`
+	Stack   string          `json:"stack,omitempty"`
 }
 
 type PaginationMeta struct {
@@ -123,6 +127,21 @@ func RespondInternalError(w http.ResponseWriter, message string) {
 	RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", message)
 }
 
+func RespondInternalErrorFromRequest(w http.ResponseWriter, r *http.Request, message string) {
+	if IsProduction {
+		RespondInternalError(w, "internal server error")
+		return
+	}
+	resp := APIResponse{
+		Success: false,
+		Error:   &ErrorBody{Code: "INTERNAL_ERROR", Message: message},
+	}
+	if info, ok := GetErrorInfo(r.Context()); ok {
+		resp.Stack = info.Stack
+	}
+	RespondJSON(w, http.StatusInternalServerError, resp)
+}
+
 func MapError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
@@ -137,5 +156,24 @@ func MapError(w http.ResponseWriter, err error) {
 		RespondUnauthorized(w, err.Error())
 	default:
 		RespondInternalError(w, "internal server error")
+	}
+}
+
+func MapErrorFromRequest(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, domain.ErrNotFound):
+		RespondNotFound(w, err.Error())
+	case errors.Is(err, domain.ErrAlreadyExists) || errors.Is(err, domain.ErrConflict):
+		RespondConflict(w, err.Error())
+	case errors.Is(err, domain.ErrValidation):
+		RespondBadRequest(w, err.Error())
+	case errors.Is(err, domain.ErrForbidden):
+		RespondForbidden(w, "FORBIDDEN", err.Error())
+	case errors.Is(err, domain.ErrUnauthorized):
+		RespondUnauthorized(w, err.Error())
+	default:
+		stack := string(debug.Stack())
+		ctx := SetErrorInfo(r.Context(), err, stack)
+		RespondInternalErrorFromRequest(w, r.WithContext(ctx), "internal server error")
 	}
 }

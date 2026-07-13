@@ -2,15 +2,14 @@ package query
 
 import (
 	"context"
-	"time"
 
 	"github.com/IDTS-LAB/go-codebase/internal/tenant/application/dto"
 	"github.com/IDTS-LAB/go-codebase/internal/tenant/domain/repository"
 )
 
 type ListTenantsQuery struct {
-	Page    int
-	PerPage int
+	Cursor *string
+	Limit  int
 }
 
 type ListTenantsHandler struct {
@@ -23,8 +22,7 @@ func NewListTenantsHandler(repo repository.TenantRepository) *ListTenantsHandler
 
 func (h *ListTenantsHandler) Handle(ctx context.Context, query any) (any, error) {
 	q := query.(ListTenantsQuery)
-	offset := (q.Page - 1) * q.PerPage
-	tenants, total, err := h.repo.List(ctx, offset, q.PerPage)
+	tenants, nextCursor, prevCursor, hasNext, hasPrev, err := h.repo.List(ctx, q.Cursor, q.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -38,10 +36,17 @@ func (h *ListTenantsHandler) Handle(ctx context.Context, query any) (any, error)
 			Domain:    t.Domain,
 			Settings:  t.Settings,
 			IsActive:  t.IsActive,
-			CreatedAt: t.CreatedAt.Format(time.RFC3339Nano),
-			UpdatedAt: t.UpdatedAt.Format(time.RFC3339Nano),
+			CreatedAt: t.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			UpdatedAt: t.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		}
 	}
 
-	return dto.TenantListResponse{Tenants: responses, Total: total}, nil
+	return dto.TenantListResponse{
+		Tenants:    responses,
+		NextCursor: nextCursor,
+		PrevCursor: prevCursor,
+		HasNext:    hasNext,
+		HasPrev:    hasPrev,
+		Limit:      q.Limit,
+	}, nil
 }

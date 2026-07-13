@@ -8,13 +8,16 @@ import (
 )
 
 type ListRolesQuery struct {
-	Page    int
-	PerPage int
+	Cursor *string
+	Limit  int
 }
 
 type ListRolesResult struct {
-	Roles []*entity.Role
-	Total int
+	Roles      []*entity.Role
+	NextCursor *string
+	PrevCursor *string
+	HasNext    bool
+	HasPrev    bool
 }
 
 type ListRolesHandler struct {
@@ -27,10 +30,15 @@ func NewListRolesHandler(roleRepo repository.RoleRepository) *ListRolesHandler {
 
 func (h *ListRolesHandler) Handle(ctx context.Context, query any) (any, error) {
 	q := query.(ListRolesQuery)
-	offset := (q.Page - 1) * q.PerPage
-	roles, total, err := h.roleRepo.GetAll(ctx, offset, q.PerPage)
+	roles, nextCursor, prevCursor, hasNext, hasPrev, err := h.roleRepo.GetAll(ctx, q.Cursor, q.Limit)
 	if err != nil {
 		return nil, err
 	}
-	return ListRolesResult{Roles: roles, Total: total}, nil
+	return ListRolesResult{
+		Roles:      roles,
+		NextCursor: nextCursor,
+		PrevCursor: prevCursor,
+		HasNext:    hasNext,
+		HasPrev:    hasPrev,
+	}, nil
 }

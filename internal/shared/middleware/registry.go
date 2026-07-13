@@ -43,7 +43,7 @@ func NewRegistry(
 		Auth:          auth,
 		Logger:        Logger(log),
 		ErrorHandler:  ErrorHandler(log, errorRepo),
-		ErrorRecorder: ErrorRecorder(nil, errorRepo),
+		ErrorRecorder: ErrorRecorder(log, errorRepo),
 		AuditLog:      AuditLog(errorRepo),
 		RateLimit:     RateLimit(rdb, cfg.RateLimit.Requests, time.Duration(cfg.RateLimit.Window)*time.Second),
 		Idempotency:   Idempotency(rdb, time.Duration(cfg.Idempotency.TTL)*time.Second),

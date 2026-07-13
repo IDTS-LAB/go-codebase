@@ -8,13 +8,16 @@ import (
 )
 
 type ListPermissionsQuery struct {
-	Page    int
-	PerPage int
+	Cursor *string
+	Limit  int
 }
 
 type ListPermissionsResult struct {
 	Permissions []*entity.Permission
-	Total       int
+	NextCursor  *string
+	PrevCursor  *string
+	HasNext     bool
+	HasPrev     bool
 }
 
 type ListPermissionsHandler struct {
@@ -27,10 +30,15 @@ func NewListPermissionsHandler(permRepo repository.PermissionRepository) *ListPe
 
 func (h *ListPermissionsHandler) Handle(ctx context.Context, query any) (any, error) {
 	q := query.(ListPermissionsQuery)
-	offset := (q.Page - 1) * q.PerPage
-	permissions, total, err := h.permRepo.GetAll(ctx, offset, q.PerPage)
+	permissions, nextCursor, prevCursor, hasNext, hasPrev, err := h.permRepo.GetAll(ctx, q.Cursor, q.Limit)
 	if err != nil {
 		return nil, err
 	}
-	return ListPermissionsResult{Permissions: permissions, Total: total}, nil
+	return ListPermissionsResult{
+		Permissions: permissions,
+		NextCursor:  nextCursor,
+		PrevCursor:  prevCursor,
+		HasNext:     hasNext,
+		HasPrev:     hasPrev,
+	}, nil
 }

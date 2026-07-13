@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/cursor"
@@ -165,7 +166,8 @@ func (r *todoRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (r *todoRepository) Search(ctx context.Context, query string, cursorArg *string, limit int) ([]*entity.Todo, *string, *string, bool, bool, error) {
-	searchPattern := "%" + query + "%"
+	replacer := strings.NewReplacer(`%`, `\%`, `_`, `\_`)
+	searchPattern := "%" + replacer.Replace(query) + "%"
 
 	args := []interface{}{searchPattern}
 	whereClause := "WHERE deleted_at IS NULL AND (title ILIKE $1 OR description ILIKE $1)"

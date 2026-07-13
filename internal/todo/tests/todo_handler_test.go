@@ -40,9 +40,9 @@ func (m *MockTodoRepo) GetByID(ctx context.Context, id uuid.UUID) (*entity.Todo,
 	return args.Get(0).(*entity.Todo), args.Error(1)
 }
 
-func (m *MockTodoRepo) GetAll(ctx context.Context, offset, limit int) ([]*entity.Todo, int, error) {
-	args := m.Called(ctx, offset, limit)
-	return args.Get(0).([]*entity.Todo), args.Int(1), args.Error(2)
+func (m *MockTodoRepo) GetAll(ctx context.Context, cursor *string, limit int) ([]*entity.Todo, *string, *string, bool, bool, error) {
+	args := m.Called(ctx, cursor, limit)
+	return args.Get(0).([]*entity.Todo), nil, nil, false, false, args.Error(1)
 }
 
 func (m *MockTodoRepo) Update(ctx context.Context, todo *entity.Todo) error {
@@ -55,9 +55,9 @@ func (m *MockTodoRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	return args.Error(0)
 }
 
-func (m *MockTodoRepo) Search(ctx context.Context, queryStr string, offset, limit int) ([]*entity.Todo, int, error) {
-	args := m.Called(ctx, queryStr, offset, limit)
-	return args.Get(0).([]*entity.Todo), args.Int(1), args.Error(2)
+func (m *MockTodoRepo) Search(ctx context.Context, queryStr string, cursor *string, limit int) ([]*entity.Todo, *string, *string, bool, bool, error) {
+	args := m.Called(ctx, queryStr, cursor, limit)
+	return args.Get(0).([]*entity.Todo), nil, nil, false, false, args.Error(1)
 }
 
 func setupHandler(t *testing.T) (*httpHandler.Handler, *MockTodoRepo) {
@@ -245,7 +245,7 @@ func TestSearchTodos_Success(t *testing.T) {
 
 	id := uuid.New()
 	todos := []*entity.Todo{newTestTodo(id, "Test")}
-	repo.On("Search", mock.Anything, "test", 0, 20).Return(todos, 1, nil)
+	repo.On("Search", mock.Anything, "test", (*string)(nil), 20).Return(todos, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/todos/search?q=test", nil)
 	rr := httptest.NewRecorder()

@@ -77,7 +77,8 @@ func TestAdaptPaginated_ReturnsPaginationMeta(t *testing.T) {
 	assert.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.True(t, resp.Success)
 	assert.NotNil(t, resp.Meta)
-	assert.Equal(t, 1, resp.Meta.TotalPages)
+	meta := resp.Meta.(map[string]interface{})
+	assert.Equal(t, float64(1), meta["total_pages"])
 }
 
 func TestAdapt_MapsDomainError(t *testing.T) {

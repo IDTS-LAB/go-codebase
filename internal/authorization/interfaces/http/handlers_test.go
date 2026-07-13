@@ -105,7 +105,6 @@ func TestListRoles(t *testing.T) {
 
 		roles := query.ListRolesResult{
 			Roles: []*entity.Role{{Name: "admin"}},
-			Total: 1,
 		}
 		qBus.Register(query.ListRolesQuery{}, &mockHandler{result: roles})
 
@@ -288,7 +287,6 @@ func TestListPermissions(t *testing.T) {
 
 		perms := query.ListPermissionsResult{
 			Permissions: []*entity.Permission{{Name: "read", Resource: "users", Action: "read"}},
-			Total:       1,
 		}
 		qBus.Register(query.ListPermissionsQuery{}, &mockHandler{result: perms})
 
