@@ -1,0 +1,82 @@
+{
+  "title": "NATS",
+  "uid": "nats",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "panels": [
+    {
+      "title": "Active Connections",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+      "targets": [{"expr": "nats_connections", "legendFormat": ""}]
+    },
+    {
+      "title": "Subscriptions",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
+      "targets": [{"expr": "nats_subscriptions", "legendFormat": ""}]
+    },
+    {
+      "title": "Uptime",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 0},
+      "targets": [{"expr": "nats_uptime_seconds", "legendFormat": ""}],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "title": "Messages In/Out",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [
+        {"expr": "rate(nats_messages_sent_total[5m])", "legendFormat": "sent"},
+        {"expr": "rate(nats_messages_received_total[5m])", "legendFormat": "received"}
+      ],
+      "lines": true,
+      "fill": 1
+    },
+    {
+      "title": "Bytes In/Out",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [
+        {"expr": "rate(nats_out_bytes_total[5m])", "legendFormat": "out"},
+        {"expr": "rate(nats_in_bytes_total[5m])", "legendFormat": "in"}
+      ],
+      "lines": true,
+      "fill": 1
+    },
+    {
+      "title": "Publish Rate by Subject",
+      "type": "bargauge",
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 12},
+      "targets": [{"expr": "rate(nats_published_total[5m])", "legendFormat": "{{subject}}"}]
+    },
+    {
+      "title": "Receive Rate by Subject",
+      "type": "bargauge",
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 12},
+      "targets": [{"expr": "rate(nats_received_total[5m])", "legendFormat": "{{subject}}"}]
+    },
+    {
+      "title": "Data Volume by Subject",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 12},
+      "targets": [{"expr": "rate(nats_publish_bytes_total[5m])", "legendFormat": "{{subject}}"}],
+      "lines": true,
+      "fill": 1
+    },
+    {
+      "title": "Recent Messages",
+      "type": "table",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
+      "targets": [{
+        "refId": "A",
+        "type": "json",
+        "url": "http://api:8080/debug/nats",
+        "fields": ["timestamp", "subject", "payload"]
+      }],
+      "datasource": "Infinity"
+    }
+  ]
+}
