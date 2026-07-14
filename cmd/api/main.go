@@ -60,19 +60,21 @@ func run() error {
 	fmt.Printf("[config] env=%s log_format=%s log_level=%s\n", cfg.App.Env, cfg.Log.Format, cfg.Log.Level)
 
 	var (
-		authHandler     *authHTTP.Handler
-		todoHandler     *todoHTTP.Handler
-		authzHandler    *authzHTTP.Handler
-		userHandler     *userHTTP.Handler
-		tenantHandler   *tenantHTTP.Handler
-		enforcer        *casbin.Enforcer
-		log             domain.Logger
-		db              *sql.DB
-		rdb             *redis.Client
-		tokenSvc        domain.TokenService
-		errorRepo       *auditlog.Repository
-		metricsRecorder monitoringDomain.MetricsRecorder
-		metricsHandler  http.Handler
+		authHandler      *authHTTP.Handler
+		todoHandler      *todoHTTP.Handler
+		authzHandler     *authzHTTP.Handler
+		userHandler      *userHTTP.Handler
+		tenantHandler    *tenantHTTP.Handler
+		enforcer         *casbin.Enforcer
+		log              domain.Logger
+		db               *sql.DB
+		rdb              *redis.Client
+		tokenSvc         domain.TokenService
+		errorRepo        *auditlog.Repository
+		metricsRecorder  monitoringDomain.MetricsRecorder
+		metricsHandler   http.Handler
+		natsMessenger    *messaging.NATSMessenger
+		debugNATSHandler http.Handler
 	)
 
 	app := fx.New(
@@ -123,7 +125,12 @@ func run() error {
 		fx.Populate(&errorRepo),
 		fx.Populate(&metricsRecorder),
 		fx.Populate(&metricsHandler),
+		fx.Populate(&natsMessenger),
 	)
+
+	if natsMessenger != nil {
+		debugNATSHandler = natsMessenger.DebugHandler()
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -135,12 +142,13 @@ func run() error {
 	mw := middleware.NewRegistry(tokenSvc, rdb, cfg, log, errorRepo, enforcer, metricsRecorder)
 
 	root := router.NewRouter(router.Handlers{
-		Auth:           authHTTP.NewRouter(authHandler, mw.Auth),
-		Todo:           todoHTTP.NewRouter(todoHandler, mw.Auth, enforcer),
-		Authz:          authzHTTP.NewRouter(authzHandler, mw.Auth, enforcer),
-		User:           userHTTP.NewRouter(userHandler, mw.Auth, enforcer),
-		Tenant:         tenantHTTP.NewRouter(tenantHandler, mw.Auth, enforcer),
-		MetricsHandler: metricsHandler,
+		Auth:             authHTTP.NewRouter(authHandler, mw.Auth),
+		Todo:             todoHTTP.NewRouter(todoHandler, mw.Auth, enforcer),
+		Authz:            authzHTTP.NewRouter(authzHandler, mw.Auth, enforcer),
+		User:             userHTTP.NewRouter(userHandler, mw.Auth, enforcer),
+		Tenant:           tenantHTTP.NewRouter(tenantHandler, mw.Auth, enforcer),
+		MetricsHandler:   metricsHandler,
+		DebugNATSHandler: debugNATSHandler,
 	}, mw, log, cfg, db)
 
 	srv := &http.Server{

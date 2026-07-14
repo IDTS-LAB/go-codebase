@@ -14,12 +14,13 @@ import (
 const APIPrefix = "/api/v1"
 
 type Handlers struct {
-	Auth           *chi.Mux
-	Todo           *chi.Mux
-	Authz          *chi.Mux
-	User           *chi.Mux
-	Tenant         *chi.Mux
-	MetricsHandler http.Handler
+	Auth             *chi.Mux
+	Todo             *chi.Mux
+	Authz            *chi.Mux
+	User             *chi.Mux
+	Tenant           *chi.Mux
+	MetricsHandler   http.Handler
+	DebugNATSHandler http.Handler
 }
 
 func NewRouter(h Handlers, mw middleware.Registry, log domain.Logger, cfg *config.Config, db *sql.DB) *chi.Mux {
@@ -42,6 +43,10 @@ func NewRouter(h Handlers, mw middleware.Registry, log domain.Logger, cfg *confi
 
 	if h.MetricsHandler != nil {
 		r.Handle("/metrics", h.MetricsHandler)
+	}
+
+	if h.DebugNATSHandler != nil {
+		r.Get("/debug/nats", h.DebugNATSHandler.ServeHTTP)
 	}
 
 	r.Route(APIPrefix, func(r chi.Router) {

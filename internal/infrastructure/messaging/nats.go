@@ -3,6 +3,7 @@ package messaging
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/config"
@@ -45,25 +46,37 @@ var (
 )
 
 type NATSMessenger struct {
-	conn *nats.Conn
+	conn     *nats.Conn
+	debugBuf *debugBuffer
 }
 
 func NewNATSMessenger(cfg *config.Config) (*NATSMessenger, error) {
+	m := &NATSMessenger{}
+	if cfg.NATS.DebugEndpoint {
+		m.debugBuf = newDebugBuffer(100)
+	}
 	if cfg.NATS.URL == "" {
-		return &NATSMessenger{}, nil
+		return m, nil
 	}
 
 	conn, err := nats.Connect(cfg.NATS.URL)
 	if err != nil {
 		return nil, fmt.Errorf("connect nats: %w", err)
 	}
+	m.conn = conn
+	return m, nil
+}
 
-	return &NATSMessenger{conn: conn}, nil
+func (n *NATSMessenger) DebugHandler() http.Handler {
+	return &debugNATSHandler{buffer: n.debugBuf}
 }
 
 func (n *NATSMessenger) Publish(ctx context.Context, subject string, data []byte) error {
 	if n.conn == nil {
 		return nil
+	}
+	if n.debugBuf != nil {
+		n.debugBuf.append(subject, data)
 	}
 	natsPublishedTotal.WithLabelValues(subject).Inc()
 	natsPublishBytesTotal.WithLabelValues(subject).Add(float64(len(data)))
