@@ -8,8 +8,11 @@ import (
 )
 
 type mockJetStream struct {
-	mu         sync.Mutex
-	published  []struct{ subject string; data []byte }
+	mu        sync.Mutex
+	published []struct {
+		subject string
+		data    []byte
+	}
 	subscribed map[string]func(msg jetStreamMsg)
 	lastMsg    *testMsg
 }
@@ -17,7 +20,10 @@ type mockJetStream struct {
 func (m *mockJetStream) Publish(subject string, data []byte) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.published = append(m.published, struct{ subject string; data []byte }{subject, data})
+	m.published = append(m.published, struct {
+		subject string
+		data    []byte
+	}{subject, data})
 	return nil
 }
 
