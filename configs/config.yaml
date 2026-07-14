@@ -38,11 +38,29 @@ redis:
   pool_size: 10
 
 # =============================================================================
+# Event Bus
+# =============================================================================
+events:
+  driver: memory
+
+# =============================================================================
 # NATS
 # =============================================================================
 nats:
   url: nats://localhost:4222
   debug_endpoint: false
+  stream:
+    name: events
+    subjects:
+      - events.>
+    storage: file
+    retention: interest
+  consumer:
+    durable_name: event-bus
+    deliver_group: event-bus
+    ack_policy: explicit
+    max_deliver: -1
+    ack_wait: 30
 
 # =============================================================================
 # Authentication & Security

@@ -31,6 +31,7 @@ type Config struct {
 	Asynq       AsynqConfig       `koanf:"asynq"`
 	Email       EmailConfig       `koanf:"email"`
 	Tenant      TenantConfig      `koanf:"multitenancy"`
+	Events      EventsConfig      `koanf:"events"`
 }
 
 // AppConfig holds application-level settings.
@@ -68,10 +69,34 @@ type RedisConfig struct {
 	PoolSize int    `koanf:"pool_size"`
 }
 
+// EventsConfig holds event bus settings.
+type EventsConfig struct {
+	Driver string `koanf:"driver"`
+}
+
+// StreamConfig holds NATS JetStream stream settings.
+type StreamConfig struct {
+	Name      string   `koanf:"name"`
+	Subjects  []string `koanf:"subjects"`
+	Storage   string   `koanf:"storage"`
+	Retention string   `koanf:"retention"`
+}
+
+// ConsumerConfig holds NATS JetStream consumer settings.
+type ConsumerConfig struct {
+	DurableName  string `koanf:"durable_name"`
+	DeliverGroup string `koanf:"deliver_group"`
+	AckPolicy    string `koanf:"ack_policy"`
+	MaxDeliver   int    `koanf:"max_deliver"`
+	AckWait      int    `koanf:"ack_wait"`
+}
+
 // NATSConfig holds NATS connection settings.
 type NATSConfig struct {
-	URL           string `koanf:"url"`
-	DebugEndpoint bool   `koanf:"debug_endpoint"`
+	URL           string         `koanf:"url"`
+	DebugEndpoint bool           `koanf:"debug_endpoint"`
+	Stream        StreamConfig   `koanf:"stream"`
+	Consumer      ConsumerConfig `koanf:"consumer"`
 }
 
 // AuthConfig holds authentication and security settings.
@@ -284,6 +309,37 @@ func setDefaults(cfg *Config) {
 	}
 	if !cfg.Email.SMTP.UseTLS && cfg.Email.SMTP.Host == "localhost" {
 		cfg.Email.SMTP.UseTLS = true
+	}
+
+	// Events
+	if cfg.Events.Driver == "" {
+		cfg.Events.Driver = "memory"
+	}
+
+	// NATS Stream/Consumer
+	if cfg.NATS.Stream.Name == "" {
+		cfg.NATS.Stream.Name = "events"
+	}
+	if cfg.NATS.Stream.Storage == "" {
+		cfg.NATS.Stream.Storage = "file"
+	}
+	if cfg.NATS.Stream.Retention == "" {
+		cfg.NATS.Stream.Retention = "interest"
+	}
+	if cfg.NATS.Consumer.DurableName == "" {
+		cfg.NATS.Consumer.DurableName = "event-bus"
+	}
+	if cfg.NATS.Consumer.DeliverGroup == "" {
+		cfg.NATS.Consumer.DeliverGroup = "event-bus"
+	}
+	if cfg.NATS.Consumer.AckPolicy == "" {
+		cfg.NATS.Consumer.AckPolicy = "explicit"
+	}
+	if cfg.NATS.Consumer.MaxDeliver == 0 {
+		cfg.NATS.Consumer.MaxDeliver = -1
+	}
+	if cfg.NATS.Consumer.AckWait == 0 {
+		cfg.NATS.Consumer.AckWait = 30
 	}
 
 	// Tenant
