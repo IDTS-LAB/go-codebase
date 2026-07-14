@@ -5,12 +5,21 @@ RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /app
 
+# Install code generation tools (pinned for reproducibility)
+# sqlc and swag outputs are gitignored, so they must be generated in-image
+RUN go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 && \
+    go install github.com/swaggo/swag/cmd/swag@v1.16.6
+
 # Copy dependency files first for better layer caching
 COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy source code
 COPY . .
+
+# Generate gitignored code: sqlc repositories and swagger docs
+RUN sqlc generate && \
+    swag init -g cmd/api/swagger.go -o docs --parseDependency --parseInternal
 
 # Build the binary
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/server ./cmd/api
