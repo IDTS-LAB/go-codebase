@@ -20,6 +20,7 @@ var Module = fx.Module("nats",
 			func(m *NATSMessenger) domain.Messenger { return m },
 			fx.As(new(domain.Messenger)),
 		),
+		func(m *NATSMessenger) nats.JetStreamContext { return m.JetStream() },
 	),
 )
 
@@ -47,6 +48,7 @@ var (
 
 type NATSMessenger struct {
 	conn     *nats.Conn
+	js       nats.JetStreamContext
 	debugBuf *debugBuffer
 }
 
@@ -64,7 +66,18 @@ func NewNATSMessenger(cfg *config.Config) (*NATSMessenger, error) {
 		return nil, fmt.Errorf("connect nats: %w", err)
 	}
 	m.conn = conn
+
+	js, err := conn.JetStream()
+	if err != nil {
+		return nil, fmt.Errorf("jetstream: %w", err)
+	}
+	m.js = js
+
 	return m, nil
+}
+
+func (n *NATSMessenger) JetStream() nats.JetStreamContext {
+	return n.js
 }
 
 func (n *NATSMessenger) DebugHandler() http.Handler {
