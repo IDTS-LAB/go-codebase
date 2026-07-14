@@ -63,7 +63,7 @@ if conn != nil {
 
 New methods:
 - `JetStream() nats.JetStreamContext` — exposes the JetStream context for use by `NATSEventBus`
-- `QueueSubscribe` — removed in favor of JetStream push consumer
+- `JetStream() nats.JetStreamContext` — exposes the JetStream context for use by `NATSEventBus`
 
 ### 2. Type Registry (`internal/shared/events/registry.go`)
 
@@ -76,7 +76,7 @@ func Register(eventType string, factory func() interface{})
 func CreatePayload(eventType string) interface{}
 ```
 
-Event types register themselves in `init()` functions:
+Event types register themselves via `fx.Invoke` blocks in each module's Fx setup:
 
 | Event Type | Struct | Package |
 |-----------|--------|---------|
@@ -111,21 +111,39 @@ nats:
     ack_wait: 30s
 ```
 
-The stream and consumer are created lazily on first `Subscribe()` if they don't exist.
+The stream is created eagerly at startup via `ensureStream()` called from `provideEventBus()`. The push consumer is created implicitly by `QueueSubscribe` with a `Durable` name on first subscription to each subject.
 
 ### 4. NATSEventBus (`internal/shared/events/nats_event_bus.go`)
 
-New file. Implements `events.EventBus` using JetStream:
+New file. Implements `events.EventBus` using JetStream via a thin `jetStreamer` abstraction:
 
-- **Publish**: serializes `event.Payload` to JSON, publishes via `JetStream.Publish()` on subject `events.{event.Type}` (JetStream persists the message)
-- **Subscribe**: stores handler locally; on first subscribe:
-  1. Ensures stream `"events"` exists (creates if not)
-  2. Ensures push consumer `"event-bus"` exists with queue group `"event-bus"` (creates if not)
-  3. Calls `JetStream.Subscribe()` with the consumer config and manual ACK
-- **NATS callback**: receives `*nats.Msg`, deserializes via type registry, reconstructs `events.Event`, dispatches to all registered local handlers
-  - If all handlers succeed → `msg.Ack()` (marks processed, not redelivered)
-  - If any handler fails → `msg.Nak()` (redelivers to this or another worker, retries indefinitely)
-- Because all instances share queue group `"event-bus"`, NATS delivers each message to exactly one worker
+```go
+type jetStreamMsg interface {
+    Ack() error
+    Nak() error
+    Data() []byte
+}
+
+type jetStreamer interface {
+    Publish(subject string, data []byte) error
+    Subscribe(subject string, cb func(msg jetStreamMsg)) error
+}
+```
+
+Two adapters bridge real NATS types to these interfaces:
+- `jsMsgAdapter` wraps `*nats.Msg` → implements `jetStreamMsg`
+- `jsContextAdapter` wraps `nats.JetStreamContext` → implements `jetStreamer` (calls `QueueSubscribe` with queue group `"event-bus"`, `Durable("event-bus")`, `MaxDeliver(-1)`, `AckWait(30s)`, `ManualAck()`)
+
+**Publish**: serializes `event.Payload` to JSON, publishes via `JetStream.Publish()` on subject `events.{event.Type}`
+
+**Subscribe**: stores handler locally; on first subscribe to an event type, calls `js.Subscribe()` which registers the JetStream push consumer. The NATS callback:
+  1. Creates payload via `CreatePayload(eventType)` from the type registry
+  2. Unmarshals JSON into the payload struct
+  3. Dispatches to all local handlers for that event type
+  4. If all handlers succeed → `Ack()`
+  5. If any handler fails → `Nak()` (redelivers, retries indefinitely)
+
+Because all instances share queue group `"event-bus"`, NATS delivers each message to exactly one worker.
 
 ### 5. Config Changes
 
@@ -171,15 +189,37 @@ Env overrides: `EVENTS_DRIVER=nats`
 
 ### 6. Module Wiring (`internal/shared/events/module.go`)
 
-Modified to switch on config:
+Modified to switch on config via a single `provideEventBus` function:
 
+```go
+func provideEventBus(cfg *config.Config, js nats.JetStreamContext, log domain.Logger) EventBus {
+    var bus EventBus
+    if cfg.Events.Driver == "nats" {
+        ensureStream(js, cfg.NATS.Stream)
+        bus = NewNATSEventBus(&jsContextAdapter{js: js})
+    } else {
+        bus = NewInMemoryEventBus()
+    }
+    return NewLoggingEventBus(bus, log)
+}
 ```
-events.driver == "memory":
-  NewInMemoryEventBus → LoggingEventBus → EventBus
 
-events.driver == "nats":
-  NewNATSEventBus(messenger, log) → EventBus
-  (NATSEventBus already includes its own logging)
+`NewLoggingEventBus` accepts `EventBus` interface (not `*InMemoryEventBus`), so it wraps either implementation transparently.
+
+`ensureStream` creates the JetStream stream on startup (idempotent — no-op if already exists):
+
+```go
+func ensureStream(js nats.JetStreamContext, cfg config.StreamConfig) {
+    _, err := js.AddStream(&nats.StreamConfig{
+        Name:      cfg.Name,
+        Subjects:  cfg.Subjects,
+        Storage:   nats.FileStorage,
+        Retention: nats.InterestPolicy,
+    })
+    if err != nil && err != nats.ErrStreamNameAlreadyInUse {
+        // log but don't fatal
+    }
+}
 ```
 
 ### 7. Auth Event JSON Tags
@@ -210,20 +250,23 @@ The `-js` flag enables JetStream on the NATS server (no additional config needed
 | File | Change |
 |------|--------|
 | `docker-compose.yml` | Add `-js` flag to NATS server command |
-| `internal/infrastructure/messaging/nats.go` | Add JetStream context, expose via `JetStream()` method |
+| `docker-compose.dev.yml` | Add `-js` flag to NATS server command |
+| `internal/infrastructure/messaging/nats.go` | Add JetStream context, expose via `JetStream()` method, provide from module |
 | `internal/shared/events/registry.go` | New — type registry |
-| `internal/shared/events/nats_event_bus.go` | New — NATS-backed EventBus using JetStream Publish/Subscribe + Ack/Nak |
-| `internal/shared/events/module.go` | Switch on config to select implementation |
+| `internal/shared/events/registry_test.go` | New — type registry tests |
+| `internal/shared/events/nats_event_bus.go` | New — NATS-backed EventBus using JetStream + Ack/Nak with `jetStreamer` abstraction |
+| `internal/shared/events/nats_event_bus_test.go` | New — NATSEventBus unit tests with mock JetStream |
+| `internal/shared/events/logging_event_bus.go` | Change `NewLoggingEventBus` to accept `EventBus` interface |
+| `internal/shared/events/module.go` | Config-driven `provideEventBus` with `ensureStream` + LoggingEventBus wrapper |
 | `internal/shared/config/config.go` | Add `EventsConfig`, extend `NATSConfig` with `Stream`/`Consumer` |
 | `configs/config.yaml` | Add `events.driver`, `nats.stream`, `nats.consumer` |
 | `internal/authentication/domain/event/auth_events.go` | Add JSON tags |
-| `internal/todo/module.go` | Register todo events in type registry |
-| `internal/authentication/module.go` | Register auth events in type registry |
+| `internal/todo/module.go` | Register todo events in type registry (via `fx.Invoke`) |
+| `internal/authentication/module.go` | Register auth events in type registry (via `fx.Invoke`) |
 
 ## Testing
 
-- Unit tests for NATSEventBus Publish/Subscribe with a mock JetStream context
-- Unit tests for type registry (register + create payload)
-- Integration test: start NATS with JetStream, publish event, verify handler receives deserialized payload
-- Config switching test: verify EventBus resolves to correct implementation
-- Test Nak on handler error: publish event, handler returns error, verify message is redelivered
+- ✅ Unit tests for NATSEventBus Publish/Subscribe with mock `jetStreamer` (3 tests: publish, ack on success, nak on error)
+- ✅ Unit tests for type registry (2 tests: register+create, unknown type returns nil)
+- Integration test: start NATS with JetStream, publish event, verify handler receives deserialized payload (TBD)
+- Config switching test: verify EventBus resolves to correct implementation (covered by module wiring — compile-time check)
