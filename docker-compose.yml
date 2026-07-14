@@ -13,6 +13,7 @@ services:
       - DB_NAME=go_codebase
       - REDIS_ADDR=redis:6379
       - NATS_URL=nats://nats:4222
+      - NATS_DEBUG_ENDPOINT=true
       - JWT_SECRET=your-secret-key-change-in-production
       - OTEL_EXPORTER_ENDPOINT=http://jaeger:4318
     depends_on:
@@ -134,6 +135,7 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource
     volumes:
       - ./deployments/grafana/datasources:/etc/grafana/provisioning/datasources
       - ./deployments/grafana/dashboards:/etc/grafana/provisioning/dashboards

@@ -13,3 +13,10 @@ datasources:
     access: proxy
     url: http://jaeger:16686
     editable: false
+
+  - name: Infinity
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    url: http://api:8080
+    isDefault: false
+    editable: false
