@@ -150,38 +150,6 @@ type AsynqConfig struct {
 // TenantConfig holds multi-tenancy settings.
 type TenantConfig struct {
 	Enabled        bool   `koanf:"enabled"`
-	TenantHeader   string `koanf:"tenant_header"`
-	TenantJWTClaim string `koanf:"tenant_jwt_claim"`
-	Domain         string `koanf:"domain"`
-}
-
-// EmailConfig holds email service settings.
-type EmailConfig struct {
-	Provider    string         `koanf:"provider"`
-	From        string         `koanf:"from"`
-	FromName    string         `koanf:"from_name"`
-	FrontendURL string         `koanf:"frontend_url"`
-	SMTP        SMTPConfig     `koanf:"smtp"`
-	SendGrid    SendGridConfig `koanf:"sendgrid"`
-}
-
-// SMTPConfig holds SMTP server settings.
-type SMTPConfig struct {
-	Host     string `koanf:"host"`
-	Port     int    `koanf:"port"`
-	Username string `koanf:"username"`
-	Password string `koanf:"password"`
-	UseTLS   bool   `koanf:"use_tls"`
-}
-
-// SendGridConfig holds SendGrid API settings.
-type SendGridConfig struct {
-	APIKey string `koanf:"api_key"`
-}
-
-// TenantConfig holds multi-tenancy settings.
-type TenantConfig struct {
-	Enabled        bool   `yaml:"enabled"`
 	TenantHeader   string `yaml:"tenant_header"`
 	TenantJWTClaim string `yaml:"tenant_jwt_claim"`
 	Domain         string `yaml:"domain"`
