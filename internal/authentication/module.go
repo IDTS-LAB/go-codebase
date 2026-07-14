@@ -3,6 +3,7 @@ package authentication
 import (
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/application/query"
+	authEvent "github.com/IDTS-LAB/go-codebase/internal/authentication/domain/event"
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/repository"
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/infrastructure/eventbus"
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/infrastructure/persistence"
@@ -21,7 +22,14 @@ var Module = fx.Module("authentication",
 		httpHandler.NewHandler,
 	),
 
-	fx.Invoke(registerHandlers),
+	fx.Invoke(
+		registerHandlers,
+		func() {
+			events.Register(authEvent.UserRegisteredEvent, func() interface{} { return &authEvent.UserRegistered{} })
+			events.Register(authEvent.EmailVerifiedEvent, func() interface{} { return &authEvent.EmailVerified{} })
+			events.Register(authEvent.PasswordResetRequestedEvent, func() interface{} { return &authEvent.PasswordResetRequested{} })
+		},
+	),
 )
 
 func registerHandlers(

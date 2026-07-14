@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/joho/godotenv"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
@@ -18,108 +17,166 @@ var Module = fx.Module("config", fx.Provide(New))
 
 // Config is the root configuration struct, grouped by usage.
 type Config struct {
-	App         AppConfig
-	Server      ServerConfig
-	Database    DatabaseConfig
-	Redis       RedisConfig
-	NATS        NATSConfig
-	Auth        AuthConfig
-	RateLimit   RateLimitConfig
-	CORS        CORSConfig
-	Idempotency IdempotencyConfig
-	Log         LogConfig
-	Telemetry   TelemetryConfig
-	Asynq       AsynqConfig
-	Email       EmailConfig
-	Tenant      TenantConfig
+	App         AppConfig         `koanf:"app"`
+	Server      ServerConfig      `koanf:"server"`
+	Database    DatabaseConfig    `koanf:"database"`
+	Redis       RedisConfig       `koanf:"redis"`
+	NATS        NATSConfig        `koanf:"nats"`
+	Auth        AuthConfig        `koanf:"auth"`
+	RateLimit   RateLimitConfig   `koanf:"rate_limit"`
+	CORS        CORSConfig        `koanf:"cors"`
+	Idempotency IdempotencyConfig `koanf:"idempotency"`
+	Log         LogConfig         `koanf:"log"`
+	Telemetry   TelemetryConfig   `koanf:"telemetry"`
+	Asynq       AsynqConfig       `koanf:"asynq"`
+	Email       EmailConfig       `koanf:"email"`
+	Tenant      TenantConfig      `koanf:"multitenancy"`
+	Events      EventsConfig      `koanf:"events"`
 }
 
 // AppConfig holds application-level settings.
 type AppConfig struct {
-	Env string
+	Env string `koanf:"env"`
 }
 
 // ServerConfig holds HTTP server settings.
 type ServerConfig struct {
-	Port               int
-	ReadTimeout        int
-	WriteTimeout       int
-	IdleTimeout        int
-	MaxRequestBodySize int
+	Port               int `koanf:"port"`
+	ReadTimeout        int `koanf:"read_timeout"`
+	WriteTimeout       int `koanf:"write_timeout"`
+	IdleTimeout        int `koanf:"idle_timeout"`
+	MaxRequestBodySize int `koanf:"max_request_body_size"`
 }
 
 // DatabaseConfig holds PostgreSQL connection settings.
 type DatabaseConfig struct {
-	Host            string
-	Port            int
-	User            string
-	Password        string
-	Name            string
-	SSLMode         string
-	MaxOpenConns    int
-	MaxIdleConns    int
-	ConnMaxLifetime int
+	Host            string `koanf:"host"`
+	Port            int    `koanf:"port"`
+	User            string `koanf:"user"`
+	Password        string `koanf:"password"`
+	Name            string `koanf:"name"`
+	SSLMode         string `koanf:"sslmode"`
+	MaxOpenConns    int    `koanf:"max_open_conns"`
+	MaxIdleConns    int    `koanf:"max_idle_conns"`
+	ConnMaxLifetime int    `koanf:"conn_max_lifetime"`
 }
 
 // RedisConfig holds Redis connection settings.
 type RedisConfig struct {
-	Addr     string
-	Password string
-	DB       int
-	PoolSize int
+	Addr     string `koanf:"addr"`
+	Password string `koanf:"password"`
+	DB       int    `koanf:"db"`
+	PoolSize int    `koanf:"pool_size"`
+}
+
+// EventsConfig holds event bus settings.
+type EventsConfig struct {
+	Driver string `koanf:"driver"`
+}
+
+// StreamConfig holds NATS JetStream stream settings.
+type StreamConfig struct {
+	Name      string   `koanf:"name"`
+	Subjects  []string `koanf:"subjects"`
+	Storage   string   `koanf:"storage"`
+	Retention string   `koanf:"retention"`
+}
+
+// ConsumerConfig holds NATS JetStream consumer settings.
+type ConsumerConfig struct {
+	DurableName  string `koanf:"durable_name"`
+	DeliverGroup string `koanf:"deliver_group"`
+	AckPolicy    string `koanf:"ack_policy"`
+	MaxDeliver   int    `koanf:"max_deliver"`
+	AckWait      int    `koanf:"ack_wait"`
 }
 
 // NATSConfig holds NATS connection settings.
 type NATSConfig struct {
-	URL string
+	URL           string         `koanf:"url"`
+	DebugEndpoint bool           `koanf:"debug_endpoint"`
+	Stream        StreamConfig   `koanf:"stream"`
+	Consumer      ConsumerConfig `koanf:"consumer"`
 }
 
 // AuthConfig holds authentication and security settings.
 type AuthConfig struct {
-	JWTSecret        string
-	JWTExpiration    int
-	MaxLoginAttempts int
-	LockoutDuration  int
-	TokenDenylist    bool
+	JWTSecret        string `koanf:"secret"`
+	JWTExpiration    int    `koanf:"expiration"`
+	MaxLoginAttempts int    `koanf:"max_login_attempts"`
+	LockoutDuration  int    `koanf:"lockout_duration"`
+	TokenDenylist    bool   `koanf:"token_denylist"`
 }
 
 // RateLimitConfig holds rate limiting settings.
 type RateLimitConfig struct {
-	Requests int
-	Window   int
+	Requests int `koanf:"requests"`
+	Window   int `koanf:"window"`
 }
 
 // CORSConfig holds CORS settings.
 type CORSConfig struct {
-	AllowedOrigins   []string
-	AllowedMethods   []string
-	AllowedHeaders   []string
-	AllowCredentials bool
-	MaxAge           int
+	AllowedOrigins   []string `koanf:"allowed_origins"`
+	AllowedMethods   []string `koanf:"allowed_methods"`
+	AllowedHeaders   []string `koanf:"allowed_headers"`
+	AllowCredentials bool     `koanf:"allow_credentials"`
+	MaxAge           int      `koanf:"max_age"`
 }
 
 // IdempotencyConfig holds idempotency settings.
 type IdempotencyConfig struct {
-	Enabled bool
-	TTL     int
+	Enabled bool `koanf:"enabled"`
+	TTL     int  `koanf:"ttl"`
 }
 
 // LogConfig holds logging settings.
 type LogConfig struct {
-	Level  string
-	Format string
+	Level  string `koanf:"level"`
+	Format string `koanf:"format"`
 }
 
 // TelemetryConfig holds OpenTelemetry settings.
 type TelemetryConfig struct {
-	ServiceName      string
-	ExporterEndpoint string
-	SampleRate       float64
+	ServiceName      string  `koanf:"service_name"`
+	ExporterEndpoint string  `koanf:"exporter_endpoint"`
+	SampleRate       float64 `koanf:"sample_rate"`
 }
 
 // AsynqConfig holds background job settings.
 type AsynqConfig struct {
-	RedisAddr string
+	RedisAddr string `koanf:"redis_addr"`
+}
+
+// TenantConfig holds multi-tenancy settings.
+type TenantConfig struct {
+	Enabled        bool   `koanf:"enabled"`
+	TenantHeader   string `koanf:"tenant_header"`
+	TenantJWTClaim string `koanf:"tenant_jwt_claim"`
+	Domain         string `koanf:"domain"`
+}
+
+// EmailConfig holds email service settings.
+type EmailConfig struct {
+	Provider    string         `koanf:"provider"`
+	From        string         `koanf:"from"`
+	FromName    string         `koanf:"from_name"`
+	FrontendURL string         `koanf:"frontend_url"`
+	SMTP        SMTPConfig     `koanf:"smtp"`
+	SendGrid    SendGridConfig `koanf:"sendgrid"`
+}
+
+// SMTPConfig holds SMTP server settings.
+type SMTPConfig struct {
+	Host     string `koanf:"host"`
+	Port     int    `koanf:"port"`
+	Username string `koanf:"username"`
+	Password string `koanf:"password"`
+	UseTLS   bool   `koanf:"use_tls"`
+}
+
+// SendGridConfig holds SendGrid API settings.
+type SendGridConfig struct {
+	APIKey string `koanf:"api_key"`
 }
 
 // TenantConfig holds multi-tenancy settings.
@@ -155,8 +212,6 @@ type SendGridConfig struct {
 }
 
 func New() (*Config, error) {
-	_ = godotenv.Load()
-
 	k := koanf.New(".")
 
 	if err := k.Load(file.Provider("configs/config.yaml"), yaml.Parser()); err != nil {
@@ -288,6 +343,37 @@ func setDefaults(cfg *Config) {
 		cfg.Email.SMTP.UseTLS = true
 	}
 
+	// Events
+	if cfg.Events.Driver == "" {
+		cfg.Events.Driver = "memory"
+	}
+
+	// NATS Stream/Consumer
+	if cfg.NATS.Stream.Name == "" {
+		cfg.NATS.Stream.Name = "events"
+	}
+	if cfg.NATS.Stream.Storage == "" {
+		cfg.NATS.Stream.Storage = "file"
+	}
+	if cfg.NATS.Stream.Retention == "" {
+		cfg.NATS.Stream.Retention = "interest"
+	}
+	if cfg.NATS.Consumer.DurableName == "" {
+		cfg.NATS.Consumer.DurableName = "event-bus"
+	}
+	if cfg.NATS.Consumer.DeliverGroup == "" {
+		cfg.NATS.Consumer.DeliverGroup = "event-bus"
+	}
+	if cfg.NATS.Consumer.AckPolicy == "" {
+		cfg.NATS.Consumer.AckPolicy = "explicit"
+	}
+	if cfg.NATS.Consumer.MaxDeliver == 0 {
+		cfg.NATS.Consumer.MaxDeliver = -1
+	}
+	if cfg.NATS.Consumer.AckWait == 0 {
+		cfg.NATS.Consumer.AckWait = 30
+	}
+
 	// Tenant
 	if cfg.Tenant.TenantHeader == "" {
 		cfg.Tenant.TenantHeader = "X-Tenant-ID"
@@ -391,6 +477,9 @@ func applyEnvOverrides(cfg *Config) {
 	// NATS
 	if v := os.Getenv("NATS_URL"); v != "" {
 		cfg.NATS.URL = v
+	}
+	if v := os.Getenv("NATS_DEBUG_ENDPOINT"); v != "" {
+		cfg.NATS.DebugEndpoint = v == "true" || v == "1"
 	}
 
 	// Auth

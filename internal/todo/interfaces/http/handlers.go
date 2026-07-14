@@ -59,7 +59,7 @@ func (h *Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	utils.HandleCreated(w, resp, err)
+	utils.HandleCreated(w, r, resp, err)
 }
 
 // ListTodos godoc
@@ -119,7 +119,7 @@ func (h *Handler) GetTodo(w http.ResponseWriter, r *http.Request) {
 			utils.RespondNotFound(w, "todo not found")
 			return
 		}
-		utils.Handle(w, nil, err)
+		utils.Handle(w, r, nil, err)
 		return
 	}
 	utils.RespondSuccess(w, resp)
@@ -163,7 +163,7 @@ func (h *Handler) UpdateTodo(w http.ResponseWriter, r *http.Request) {
 			utils.RespondNotFound(w, "todo not found")
 			return
 		}
-		utils.Handle(w, nil, err)
+		utils.Handle(w, r, nil, err)
 		return
 	}
 	utils.RespondSuccess(w, resp)
@@ -191,7 +191,7 @@ func (h *Handler) DeleteTodo(w http.ResponseWriter, r *http.Request) {
 			utils.RespondNotFound(w, "todo not found")
 			return
 		}
-		utils.Handle(w, nil, err)
+		utils.Handle(w, r, nil, err)
 		return
 	}
 	utils.RespondSuccess(w, map[string]string{"message": "todo deleted"})

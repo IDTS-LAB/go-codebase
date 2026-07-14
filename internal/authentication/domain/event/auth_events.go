@@ -1,21 +1,21 @@
 package event
 
 type UserRegistered struct {
-	Email             string
-	Name              string
-	VerificationToken string
+	Email             string `json:"email"`
+	Name              string `json:"name"`
+	VerificationToken string `json:"verification_token"`
 }
 
 type EmailVerified struct {
-	UserID string
-	Email  string
-	Name   string
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
+	Name   string `json:"name"`
 }
 
 type PasswordResetRequested struct {
-	Email      string
-	Name       string
-	ResetToken string
+	Email      string `json:"email"`
+	Name       string `json:"name"`
+	ResetToken string `json:"reset_token"`
 }
 
 const (

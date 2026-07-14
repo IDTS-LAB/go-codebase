@@ -16,7 +16,7 @@ type LoggingEventBus struct {
 }
 
 // NewLoggingEventBus creates a new LoggingEventBus wrapping the provided EventBus.
-func NewLoggingEventBus(inner *InMemoryEventBus, log domain.Logger) EventBus {
+func NewLoggingEventBus(inner EventBus, log domain.Logger) EventBus {
 	return &LoggingEventBus{inner: inner, log: log}
 }
 

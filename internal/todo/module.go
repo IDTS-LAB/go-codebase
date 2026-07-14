@@ -5,6 +5,7 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/shared/events"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/application/query"
+	todoEvent "github.com/IDTS-LAB/go-codebase/internal/todo/domain/event"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/domain/service"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/infrastructure/eventbus"
 	"github.com/IDTS-LAB/go-codebase/internal/todo/infrastructure/persistence"
@@ -31,6 +32,12 @@ var Module = fx.Module("todo",
 		registerHandlers,
 		func(bus events.EventBus, eh *eventbus.TodoEventHandler) {
 			eh.Register(bus)
+		},
+		func() {
+			events.Register(todoEvent.TodoCreatedEvent, func() interface{} { return &todoEvent.TodoCreated{} })
+			events.Register(todoEvent.TodoUpdatedEvent, func() interface{} { return &todoEvent.TodoUpdated{} })
+			events.Register(todoEvent.TodoCompletedEvent, func() interface{} { return &todoEvent.TodoCompleted{} })
+			events.Register(todoEvent.TodoDeletedEvent, func() interface{} { return &todoEvent.TodoDeleted{} })
 		},
 	),
 )

@@ -210,6 +210,39 @@ All API responses share a unified envelope:
 
 All logs include `trace_id` and `span_id` extracted from the OpenTelemetry context. See [docs/API.md](docs/API.md) for the full list of error codes.
 
+## Monitoring & Observability
+
+The application exposes Prometheus metrics at `/metrics` and traces via OpenTelemetry OTLP to Jaeger. Full observability stack runs in Docker Compose:
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| **Prometheus** | `9090` | Metrics collection and alerting |
+| **Alertmanager** | `9093` | Alert routing (Email + Discord) |
+| **Grafana** | `3000` | Dashboards (admin/admin) |
+| **Jaeger** | `16686` | Distributed tracing UI |
+
+### Grafana Dashboards (provisioned automatically)
+
+1. **Go App RED** — request rate, error rate, p50/p95/p99 latency, active requests, goroutines, memory
+2. **PostgreSQL** — connections, tps, cache hit ratio, deadlocks
+3. **Redis** — hit rate, memory, connected clients, commands/s
+4. **System Overview** — all-services health, combined metrics, latency heatmap
+
+### Prometheus Alerting Rules
+
+- `HighErrorRate` — 5xx > 5% over 5 minutes
+- `HighLatency` — p99 latency > 1s over 5 minutes
+- `ServiceDown` — target unreachable for 1 minute
+- `HighMemoryUsage` — Go RSS > 500MB
+- `DatabaseConnectionPoolExhaustion` — active connections > 40
+
+Configure Discord webhook and email recipients via environment variables:
+
+```bash
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+ALERT_EMAIL_TO=admin@example.com
+```
+
 ## Event-Driven Email
 
 Email sending is decoupled from the authentication service through domain events. The service publishes `UserRegistered`, `EmailVerified`, and `PasswordResetRequested` events; an `EmailHandler` subscribes and calls the configured mailer (SMTP, SendGrid, or console). The `EventBus` is interface-based so an async adapter (RabbitMQ, Kafka, etc.) can be swapped in without changing services or handlers.

@@ -1,0 +1,225 @@
+{
+  "title": "Go Codebase — Comprehensive",
+  "uid": "go-codebase-comprehensive",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "editable": true,
+  "tags": ["go", "postgresql", "redis", "monitoring"],
+  "refresh": "10s",
+  "panels": [
+    {
+      "title": "Service Uptime",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 3, "x": 0, "y": 0},
+      "targets": [{"expr": "up{job=\"go-codebase\"}", "legendFormat": "API"}],
+      "reduceCalc": "lastNotNull",
+      "colorMode": "background",
+      "thresholds": [{"value": 0, "color": "red"}, {"value": 1, "color": "green"}]
+    },
+    {
+      "title": "Request Rate",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 3, "x": 3, "y": 0},
+      "targets": [{"expr": "sum(rate(http_requests_total[1m]))", "legendFormat": "rps"}],
+      "reduceCalc": "lastNotNull",
+      "colorMode": "background"
+    },
+    {
+      "title": "Error Rate",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 3, "x": 6, "y": 0},
+      "targets": [{"expr": "sum(rate(http_requests_total{status=~\"5..\"}[1m])) / sum(rate(http_requests_total[1m])) * 100", "legendFormat": "%"}],
+      "reduceCalc": "lastNotNull",
+      "colorMode": "background",
+      "thresholds": [{"value": 0, "color": "green"}, {"value": 5, "color": "orange"}, {"value": 10, "color": "red"}]
+    },
+    {
+      "title": "p99 Latency",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 3, "x": 9, "y": 0},
+      "targets": [{"expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p99"}],
+      "reduceCalc": "lastNotNull",
+      "colorMode": "background",
+      "thresholds": [{"value": 0, "color": "green"}, {"value": 0.5, "color": "orange"}, {"value": 1, "color": "red"}]
+    },
+    {
+      "title": "Active Go Routines",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 3, "x": 12, "y": 0},
+      "targets": [{"expr": "go_goroutines", "legendFormat": "goroutines"}],
+      "reduceCalc": "lastNotNull"
+    },
+    {
+      "title": "Process Memory",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 3, "x": 15, "y": 0},
+      "targets": [{"expr": "process_resident_memory_bytes", "legendFormat": "RSS"}],
+      "reduceCalc": "lastNotNull"
+    },
+    {
+      "title": "DB Connections",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 3, "x": 18, "y": 0},
+      "targets": [{"expr": "pg_stat_database_numbackends", "legendFormat": "postgres"}],
+      "reduceCalc": "lastNotNull"
+    },
+    {
+      "title": "Redis Memory",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 3, "x": 21, "y": 0},
+      "targets": [{"expr": "redis_memory_used_bytes", "legendFormat": "used"}],
+      "reduceCalc": "lastNotNull"
+    },
+    {
+      "title": "Request Rate by Method",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 4},
+      "targets": [{"expr": "sum(rate(http_requests_total[1m])) by (method)", "legendFormat": "{{method}}"}],
+      "lines": true,
+      "fillOpacity": 20
+    },
+    {
+      "title": "Requests by Status",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 4},
+      "targets": [
+        {"expr": "sum(rate(http_requests_total{status=~\"2..\"}[5m])) by (status)", "legendFormat": "2xx"},
+        {"expr": "sum(rate(http_requests_total{status=~\"4..\"}[5m])) by (status)", "legendFormat": "4xx"},
+        {"expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) by (status)", "legendFormat": "5xx"}
+      ],
+      "lines": true,
+      "fillOpacity": 20
+    },
+    {
+      "title": "Error Rate (5xx %)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 4},
+      "targets": [{"expr": "rate(http_requests_total{status=~\"5..\"}[1m]) / rate(http_requests_total[1m]) * 100", "legendFormat": "error %"}],
+      "lines": true,
+      "fillOpacity": 20
+    },
+    {
+      "title": "Active Requests",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 12},
+      "targets": [{"expr": "http_requests_active", "legendFormat": "active"}],
+      "lines": true,
+      "fillOpacity": 20
+    },
+    {
+      "title": "Latency Quantiles (p50, p95, p99)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 12},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))", "legendFormat": "p95"},
+        {"expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))", "legendFormat": "p99"}
+      ],
+      "lines": true,
+      "fillOpacity": 20
+    },
+    {
+      "title": "Latency Heatmap",
+      "type": "heatmap",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 12},
+      "targets": [{"expr": "rate(http_request_duration_seconds_bucket[5m])"}]
+    },
+    {
+      "title": "Go Goroutines",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 20},
+      "targets": [{"expr": "go_goroutines", "legendFormat": "goroutines"}],
+      "lines": true,
+      "fillOpacity": 20
+    },
+    {
+      "title": "Go Memory (RSS)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 20},
+      "targets": [{"expr": "process_resident_memory_bytes", "legendFormat": "RSS"}],
+      "lines": true,
+      "fillOpacity": 20
+    },
+    {
+      "title": "Request Size",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 20},
+      "targets": [{"expr": "rate(http_request_size_bytes_sum[5m]) / rate(http_request_size_bytes_count[5m])", "legendFormat": "avg req size"}],
+      "lines": true,
+      "fillOpacity": 20
+    },
+    {
+      "title": "Response Size",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 20},
+      "targets": [{"expr": "rate(http_response_size_bytes_sum[5m]) / rate(http_response_size_bytes_count[5m])", "legendFormat": "avg resp size"}],
+      "lines": true,
+      "fillOpacity": 20
+    },
+    {
+      "title": "PostgreSQL — Active Connections",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 28},
+      "targets": [{"expr": "pg_stat_database_numbackends", "legendFormat": "connections", "datasource": "Prometheus"}],
+      "lines": true,
+      "fillOpacity": 20
+    },
+    {
+      "title": "PostgreSQL — Transactions/s",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 28},
+      "targets": [{"expr": "rate(pg_stat_database_xact_commit[5m]) + rate(pg_stat_database_xact_rollback[5m])", "legendFormat": "tps"}],
+      "lines": true,
+      "fillOpacity": 20
+    },
+    {
+      "title": "PostgreSQL — Cache Hit Ratio",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 28},
+      "targets": [{"expr": "rate(pg_stat_database_blks_hit[5m]) / (rate(pg_stat_database_blks_hit[5m]) + rate(pg_stat_database_blks_read[5m])) * 100", "legendFormat": "hit %"}],
+      "lines": true,
+      "fillOpacity": 20
+    },
+    {
+      "title": "PostgreSQL — Deadlocks",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 28},
+      "targets": [{"expr": "rate(pg_stat_database_deadlocks[5m])", "legendFormat": "deadlocks"}],
+      "lines": true,
+      "fillOpacity": 20
+    },
+    {
+      "title": "Redis — Cache Hit Rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 36},
+      "targets": [{"expr": "rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m])) * 100", "legendFormat": "hit %"}],
+      "lines": true,
+      "fillOpacity": 20
+    },
+    {
+      "title": "Redis — Memory Usage",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 36},
+      "targets": [{"expr": "redis_memory_used_bytes", "legendFormat": "used"}],
+      "lines": true,
+      "fillOpacity": 20
+    },
+    {
+      "title": "Redis — Connected Clients",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 36},
+      "targets": [{"expr": "redis_connected_clients", "legendFormat": "clients"}],
+      "lines": true,
+      "fillOpacity": 20
+    },
+    {
+      "title": "Redis — Commands/s",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 36},
+      "targets": [{"expr": "rate(redis_commands_total[5m])", "legendFormat": "cmd/s"}],
+      "lines": true,
+      "fillOpacity": 20
+    }
+  ]
+}

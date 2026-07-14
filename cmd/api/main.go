@@ -22,6 +22,8 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/email"
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/logger"
 	"github.com/IDTS-LAB/go-codebase/internal/infrastructure/messaging"
+	"github.com/IDTS-LAB/go-codebase/internal/monitoring"
+	monitoringDomain "github.com/IDTS-LAB/go-codebase/internal/monitoring/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/auditlog"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/config"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
@@ -55,18 +57,24 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
+	fmt.Printf("[config] env=%s log_format=%s log_level=%s\n", cfg.App.Env, cfg.Log.Format, cfg.Log.Level)
+
 	var (
-		authHandler   *authHTTP.Handler
-		todoHandler   *todoHTTP.Handler
-		authzHandler  *authzHTTP.Handler
-		userHandler   *userHTTP.Handler
-		tenantHandler *tenantHTTP.Handler
-		enforcer      *casbin.Enforcer
-		log           domain.Logger
-		db            *sql.DB
-		rdb           *redis.Client
-		tokenSvc      domain.TokenService
-		errorRepo     *auditlog.Repository
+		authHandler      *authHTTP.Handler
+		todoHandler      *todoHTTP.Handler
+		authzHandler     *authzHTTP.Handler
+		userHandler      *userHTTP.Handler
+		tenantHandler    *tenantHTTP.Handler
+		enforcer         *casbin.Enforcer
+		log              domain.Logger
+		db               *sql.DB
+		rdb              *redis.Client
+		tokenSvc         domain.TokenService
+		errorRepo        *auditlog.Repository
+		metricsRecorder  monitoringDomain.MetricsRecorder
+		metricsHandler   http.Handler
+		natsMessenger    *messaging.NATSMessenger
+		debugNATSHandler http.Handler
 	)
 
 	app := fx.New(
@@ -87,6 +95,7 @@ func run() error {
 		events.Module,
 		authentication.Module,
 		authorization.Module,
+		monitoring.Module,
 		todo.Module,
 		user.Module,
 		tenant.Module,
@@ -114,7 +123,14 @@ func run() error {
 		fx.Populate(&rdb),
 		fx.Populate(&tokenSvc),
 		fx.Populate(&errorRepo),
+		fx.Populate(&metricsRecorder),
+		fx.Populate(&metricsHandler),
+		fx.Populate(&natsMessenger),
 	)
+
+	if natsMessenger != nil {
+		debugNATSHandler = natsMessenger.DebugHandler()
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -123,14 +139,16 @@ func run() error {
 		return fmt.Errorf("start app: %w", err)
 	}
 
-	mw := middleware.NewRegistry(tokenSvc, rdb, cfg, log, errorRepo, enforcer)
+	mw := middleware.NewRegistry(tokenSvc, rdb, cfg, log, errorRepo, enforcer, metricsRecorder)
 
 	root := router.NewRouter(router.Handlers{
-		Auth:   authHTTP.NewRouter(authHandler, mw.Auth),
-		Todo:   todoHTTP.NewRouter(todoHandler, mw.Auth, enforcer),
-		Authz:  authzHTTP.NewRouter(authzHandler, mw.Auth, enforcer),
-		User:   userHTTP.NewRouter(userHandler, mw.Auth, enforcer),
-		Tenant: tenantHTTP.NewRouter(tenantHandler, mw.Auth, enforcer),
+		Auth:             authHTTP.NewRouter(authHandler, mw.Auth),
+		Todo:             todoHTTP.NewRouter(todoHandler, mw.Auth, enforcer),
+		Authz:            authzHTTP.NewRouter(authzHandler, mw.Auth, enforcer),
+		User:             userHTTP.NewRouter(userHandler, mw.Auth, enforcer),
+		Tenant:           tenantHTTP.NewRouter(tenantHandler, mw.Auth, enforcer),
+		MetricsHandler:   metricsHandler,
+		DebugNATSHandler: debugNATSHandler,
 	}, mw, log, cfg, db)
 
 	srv := &http.Server{

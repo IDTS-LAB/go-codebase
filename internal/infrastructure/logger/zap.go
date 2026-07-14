@@ -35,10 +35,14 @@ func NewZapLogger(cfg *config.Config) (domain.Logger, error) {
 	}
 
 	var zapCfg zap.Config
-	if cfg.Log.Format == "console" {
+	if cfg.App.Env == "development" {
 		zapCfg = zap.NewDevelopmentConfig()
 	} else {
 		zapCfg = zap.NewProductionConfig()
+	}
+
+	if cfg.Log.Format == "json" {
+		zapCfg.Encoding = "json"
 	}
 
 	zapCfg.Level = zap.NewAtomicLevelAt(level)

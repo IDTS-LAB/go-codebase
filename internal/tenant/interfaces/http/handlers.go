@@ -47,7 +47,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		utils.RespondConflict(w, err.Error())
 		return
 	}
-	utils.HandleCreated(w, resp, err)
+	utils.HandleCreated(w, r, resp, err)
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
@@ -84,7 +84,7 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 		utils.RespondNotFound(w, "tenant not found")
 		return
 	}
-	utils.Handle(w, resp, err)
+	utils.Handle(w, r, resp, err)
 }
 
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
@@ -109,7 +109,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		utils.RespondNotFound(w, "tenant not found")
 		return
 	}
-	utils.Handle(w, resp, err)
+	utils.Handle(w, r, resp, err)
 }
 
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -123,5 +123,5 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		utils.RespondNotFound(w, "tenant not found")
 		return
 	}
-	utils.HandleNoContent(w, err)
+	utils.HandleNoContent(w, r, err)
 }

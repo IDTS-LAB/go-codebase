@@ -13,6 +13,7 @@ services:
       - DB_NAME=go_codebase
       - REDIS_ADDR=redis:6379
       - NATS_URL=nats://nats:4222
+      - NATS_DEBUG_ENDPOINT=true
       - JWT_SECRET=your-secret-key-change-in-production
       - OTEL_EXPORTER_ENDPOINT=http://jaeger:4318
     depends_on:
@@ -43,6 +44,18 @@ services:
     networks:
       - app-network
 
+  postgres_exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    ports:
+      - "9187:9187"
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:postgres@postgres:5432/go_codebase?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+
   redis:
     image: redis:7-alpine
     ports:
@@ -57,12 +70,24 @@ services:
     networks:
       - app-network
 
+  redis_exporter:
+    image: oliver006/redis_exporter:latest
+    ports:
+      - "9121:9121"
+    environment:
+      REDIS_ADDR: redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+
   nats:
     image: nats:2-alpine
     ports:
       - "4222:4222"
       - "8222:8222"
-    command: ["--http_port", "8222"]
+    command: ["--http_port", "8222", "-js"]
     networks:
       - app-network
 
@@ -81,7 +106,26 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./deployments/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./deployments/prometheus:/etc/prometheus
+    networks:
+      - app-network
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./deployments/alertmanager:/etc/alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    environment:
+      - SMTP_HOST=${SMTP_HOST:-mail.example.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_FROM=${SMTP_FROM:-alert@example.com}
+      - SMTP_USERNAME=${SMTP_USERNAME:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+      - ALERT_EMAIL_TO=${ALERT_EMAIL_TO:-admin@example.com}
     networks:
       - app-network
 
@@ -91,8 +135,13 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource
     volumes:
+      - ./deployments/grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./deployments/grafana/dashboards:/etc/grafana/provisioning/dashboards
       - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
     networks:
       - app-network
 

@@ -1,0 +1,41 @@
+{
+  "title": "Redis",
+  "uid": "redis",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "panels": [
+    {
+      "title": "Cache Hit Rate",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+      "targets": [{"expr": "rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m])) * 100", "legendFormat": "hit %"}],
+      "lines": true,
+      "fill": 1
+    },
+    {
+      "title": "Memory Usage",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+      "targets": [{"expr": "redis_memory_used_bytes", "legendFormat": "used"}],
+      "lines": true,
+      "fill": 1
+    },
+    {
+      "title": "Connected Clients",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+      "targets": [{"expr": "redis_connected_clients", "legendFormat": "clients"}],
+      "lines": true,
+      "fill": 1
+    },
+    {
+      "title": "Commands Per Second",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+      "targets": [{"expr": "rate(redis_commands_total[5m])", "legendFormat": "cmd/s"}],
+      "lines": true,
+      "fill": 1
+    }
+  ]
+}

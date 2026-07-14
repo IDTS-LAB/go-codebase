@@ -58,7 +58,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		utils.RespondConflict(w, "email already registered")
 		return
 	}
-	utils.HandleCreated(w, dto.MessageResponse{Message: "user registered successfully. Check your email for verification."}, err)
+	utils.HandleCreated(w, r, dto.MessageResponse{Message: "user registered successfully. Check your email for verification."}, err)
 }
 
 // Login godoc
@@ -109,7 +109,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tokens := tokenResp.(*command.TokenPair)
-	utils.Handle(w, dto.TokenResponse{
+	utils.Handle(w, r, dto.TokenResponse{
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 		ExpiresIn:    tokens.ExpiresIn,
@@ -150,7 +150,7 @@ func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tokens := resp.(*command.TokenPair)
-	utils.Handle(w, dto.TokenResponse{
+	utils.Handle(w, r, dto.TokenResponse{
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 		ExpiresIn:    tokens.ExpiresIn,
@@ -183,7 +183,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		AccessTokenJTI: accessTokenJTI,
 		AccessTokenTTL: 15 * time.Minute,
 	})
-	utils.Handle(w, dto.MessageResponse{Message: "logged out successfully"}, err)
+	utils.Handle(w, r, dto.MessageResponse{Message: "logged out successfully"}, err)
 }
 
 // LogoutAllSessions godoc
@@ -207,7 +207,7 @@ func (h *Handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err = h.commandBus.Dispatch(r.Context(), command.LogoutAllCommand{UserID: uid})
-	utils.Handle(w, dto.MessageResponse{Message: "all sessions terminated"}, err)
+	utils.Handle(w, r, dto.MessageResponse{Message: "all sessions terminated"}, err)
 }
 
 // Me godoc
@@ -225,7 +225,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		utils.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
 		return
 	}
-	utils.Handle(w, dto.UserResponse{
+	utils.Handle(w, r, dto.UserResponse{
 		ID:       userID,
 		Email:    middleware.GetUserEmail(r.Context()),
 		Name:     "",
@@ -252,7 +252,7 @@ func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	utils.Handle(w, map[string]string{"message": "email verified successfully"}, err)
+	utils.Handle(w, r, map[string]string{"message": "email verified successfully"}, err)
 }
 
 // ForgotPassword godoc
@@ -306,7 +306,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		utils.RespondBadRequest(w, err.Error())
 		return
 	}
-	utils.Handle(w, map[string]string{"message": "password reset successfully"}, err)
+	utils.Handle(w, r, map[string]string{"message": "password reset successfully"}, err)
 }
 
 // ResendVerification godoc
