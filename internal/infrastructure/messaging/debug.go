@@ -85,5 +85,5 @@ func (h *debugNATSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	entries := h.buffer.read()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(entries)
+	_ = json.NewEncoder(w).Encode(entries)
 }

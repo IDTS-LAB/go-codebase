@@ -80,11 +80,11 @@ func (b *NATSEventBus) startSubscription(eventType string) {
 	_ = b.js.Subscribe(subject, func(msg jetStreamMsg) {
 		payload := CreatePayload(eventType)
 		if payload == nil {
-			msg.Ack()
+			_ = msg.Ack()
 			return
 		}
 		if err := json.Unmarshal(msg.Data(), payload); err != nil {
-			msg.Ack()
+			_ = msg.Ack()
 			return
 		}
 		event := Event{Type: eventType, Payload: payload}
@@ -95,10 +95,10 @@ func (b *NATSEventBus) startSubscription(eventType string) {
 
 		for _, h := range handlers {
 			if err := h(context.Background(), event); err != nil {
-				msg.Nak()
+				_ = msg.Nak()
 				return
 			}
 		}
-		msg.Ack()
+		_ = msg.Ack()
 	})
 }
