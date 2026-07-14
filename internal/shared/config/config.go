@@ -70,7 +70,8 @@ type RedisConfig struct {
 
 // NATSConfig holds NATS connection settings.
 type NATSConfig struct {
-	URL string `koanf:"url"`
+	URL           string `koanf:"url"`
+	DebugEndpoint bool   `koanf:"debug_endpoint"`
 }
 
 // AuthConfig holds authentication and security settings.
@@ -388,6 +389,9 @@ func applyEnvOverrides(cfg *Config) {
 	// NATS
 	if v := os.Getenv("NATS_URL"); v != "" {
 		cfg.NATS.URL = v
+	}
+	if v := os.Getenv("NATS_DEBUG_ENDPOINT"); v != "" {
+		cfg.NATS.DebugEndpoint = v == "true" || v == "1"
 	}
 
 	// Auth
