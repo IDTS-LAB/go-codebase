@@ -60,6 +60,22 @@ make run
 | GET | /health | Health check |
 | GET | /ready | Readiness check |
 
+## Event Bus
+
+The EventBus is switchable between in-memory and NATS JetStream via config:
+
+```yaml
+events:
+  driver: memory    # "memory" (default) or "nats"
+```
+
+| Driver | Delivery | Persistence | Cross-instance |
+|--------|----------|-------------|----------------|
+| `memory` | Synchronous, at-most-once | None | No |
+| `nats` | At-least-once via Ack/Nak | File-backed stream | Queue group (one worker per message) |
+
+When `driver: nats`, events are published to a JetStream stream (`events.>`) and consumed via a push consumer with queue group `event-bus`. Handlers that return an error trigger `Nak()`, causing infinite redelivery.
+
 ## Project Structure
 
 See [FolderStructure.md](FolderStructure.md)
