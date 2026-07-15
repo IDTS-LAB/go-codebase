@@ -59,7 +59,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: go_codebase_test
+          POSTGRES_DB: codebase_testing
         ports:
           - 5432:5432
         options: >-
@@ -109,11 +109,11 @@ jobs:
           DB_PORT: 5432
           DB_USER: postgres
           DB_PASSWORD: postgres
-          DB_NAME: go_codebase_test
+          DB_NAME: codebase_testing
           DB_SSLMODE: disable
           REDIS_ADDR: localhost:6379
           JWT_SECRET: test-secret-key-not-for-production
-        run: go test -race -count=1 ./...
+        run: go test -race -count=1 -v ./...
 
   build:
     name: Build
