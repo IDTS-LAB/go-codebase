@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	authEntity "github.com/IDTS-LAB/go-codebase/internal/authentication/domain/entity"
+	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/utils"
@@ -166,8 +166,8 @@ func TestList_Success(t *testing.T) {
 
 	qBus.Register(query.ListUsersQuery{}, &mockHandler{
 		result: query.ListUsersResult{
-			Users:   []*authEntity.User{},
-			Limit:   20,
+			Users: []*authEntity.User{},
+			Limit: 20,
 		},
 	})
 

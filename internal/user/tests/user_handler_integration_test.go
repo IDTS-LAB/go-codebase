@@ -17,8 +17,8 @@ import (
 	"github.com/IDTS-LAB/go-codebase/internal/shared/tenantfilter"
 	"github.com/IDTS-LAB/go-codebase/internal/user/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/user/application/query"
-	userHttp "github.com/IDTS-LAB/go-codebase/internal/user/interfaces/http"
 	userRepo "github.com/IDTS-LAB/go-codebase/internal/user/infrastructure/persistence"
+	userHttp "github.com/IDTS-LAB/go-codebase/internal/user/interfaces/http"
 )
 
 type mockRoleProvider struct{}

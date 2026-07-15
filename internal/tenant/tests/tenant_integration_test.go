@@ -10,9 +10,9 @@ import (
 
 	_ "github.com/lib/pq"
 
-	"github.com/IDTS-LAB/go-codebase/internal/testhelper"
 	"github.com/IDTS-LAB/go-codebase/internal/tenant/domain/entity"
 	tenantPersistence "github.com/IDTS-LAB/go-codebase/internal/tenant/infrastructure/persistence"
+	"github.com/IDTS-LAB/go-codebase/internal/testhelper"
 	"github.com/google/uuid"
 )
 

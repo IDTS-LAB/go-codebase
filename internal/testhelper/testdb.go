@@ -50,7 +50,9 @@ func envOrDefault(key, def string) string {
 }
 
 func runMigrations(db *sql.DB) error {
-	goose.SetDialect("postgres")
+	if err := goose.SetDialect("postgres"); err != nil {
+		return fmt.Errorf("set dialect: %w", err)
+	}
 	mDir := migrationsDir()
 	if _, err := os.Stat(mDir); os.IsNotExist(err) {
 		return fmt.Errorf("migrations directory not found at %s", mDir)

@@ -12,19 +12,18 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	authzHttp "github.com/IDTS-LAB/go-codebase/internal/authorization/interfaces/http"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/command"
 	"github.com/IDTS-LAB/go-codebase/internal/authorization/application/query"
 	authzRepo "github.com/IDTS-LAB/go-codebase/internal/authorization/infrastructure/persistence"
+	authzHttp "github.com/IDTS-LAB/go-codebase/internal/authorization/interfaces/http"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/cqrs"
-	"github.com/IDTS-LAB/go-codebase/internal/shared/middleware"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/tenantfilter"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/validator"
 )
 
 type mockEnforcer struct{}
 
-func (m *mockEnforcer) ReloadPolicies(ctx context.Context) error               { return nil }
+func (m *mockEnforcer) ReloadPolicies(ctx context.Context) error                       { return nil }
 func (m *mockEnforcer) ReloadUserPolicies(ctx context.Context, userID uuid.UUID) error { return nil }
 func (m *mockEnforcer) Enforce(userID uuid.UUID, resource, action string) (bool, error) {
 	return true, nil
@@ -80,11 +79,6 @@ func withChiParams(r *http.Request, params map[string]string) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 }
 
-func withUserID(r *http.Request, userID string) *http.Request {
-	ctx := context.WithValue(r.Context(), middleware.UserIDKey, userID)
-	return r.WithContext(ctx)
-}
-
 func decodeResponse(t *testing.T, body []byte) apiResponse {
 	t.Helper()
 	var resp apiResponse
@@ -106,7 +100,7 @@ func TestHandler_CreateAndGetRole(t *testing.T) {
 	resp := decodeResponse(t, w.Body.Bytes())
 
 	if w.Code != http.StatusCreated {
-		t.Fatalf("expected 201, got %d: %s", w.Code, string(w.Body.Bytes()))
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
 	}
 	if !resp.Success {
 		t.Fatal("expected success")
@@ -130,7 +124,7 @@ func TestHandler_CreateAndGetRole(t *testing.T) {
 	h.GetRole(w2, getReq)
 
 	if w2.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w2.Code, string(w2.Body.Bytes()))
+		t.Fatalf("expected 200, got %d: %s", w2.Code, w2.Body.String())
 	}
 	var gotRole struct {
 		ID          string `json:"id"`
@@ -164,7 +158,7 @@ func TestHandler_CreateAndListRoles(t *testing.T) {
 	h.ListRoles(w2, listReq)
 
 	if w2.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w2.Code, string(w2.Body.Bytes()))
+		t.Fatalf("expected 200, got %d: %s", w2.Code, w2.Body.String())
 	}
 
 	resp := decodeResponse(t, w2.Body.Bytes())
@@ -213,7 +207,7 @@ func TestHandler_CreateUpdateAndGetRole(t *testing.T) {
 	h.UpdateRole(w2, putReq)
 
 	if w2.Code != http.StatusOK {
-		t.Fatalf("update: expected 200, got %d: %s", w2.Code, string(w2.Body.Bytes()))
+		t.Fatalf("update: expected 200, got %d: %s", w2.Code, w2.Body.String())
 	}
 
 	getReq := httptest.NewRequest(http.MethodGet, "/auth/sessions/roles/"+created.ID, nil)
@@ -261,7 +255,7 @@ func TestHandler_CreateDeleteAndGetRole(t *testing.T) {
 	w2 := httptest.NewRecorder()
 	h.DeleteRole(w2, delReq)
 	if w2.Code != http.StatusOK {
-		t.Fatalf("delete: expected 200, got %d: %s", w2.Code, string(w2.Body.Bytes()))
+		t.Fatalf("delete: expected 200, got %d: %s", w2.Code, w2.Body.String())
 	}
 
 	getReq := httptest.NewRequest(http.MethodGet, "/auth/sessions/roles/"+created.ID, nil)
@@ -391,8 +385,8 @@ func TestHandler_CreateUpdateAndGetPermission(t *testing.T) {
 
 	resp3 := decodeResponse(t, w3.Body.Bytes())
 	var updated struct {
-		Name     string `json:"name"`
-		Action   string `json:"action"`
+		Name   string `json:"name"`
+		Action string `json:"action"`
 	}
 	json.Unmarshal(resp3.Data, &updated)
 	if updated.Name != updatedName {
@@ -454,7 +448,7 @@ func TestHandler_AssignAndGetRolePermissions(t *testing.T) {
 	}
 	resp := decodeResponse(t, w.Body.Bytes())
 	var role struct {
-		ID string `json:"id"`
+		ID   string `json:"id"`
 		Name string `json:"name"`
 	}
 	json.Unmarshal(resp.Data, &role)

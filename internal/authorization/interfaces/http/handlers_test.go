@@ -957,8 +957,6 @@ func TestHandlerErrors(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 
-
-
 	t.Run("create permission bad JSON", func(t *testing.T) {
 		cmdBus := cqrs.NewInMemoryCommandBus()
 		qBus := cqrs.NewInMemoryQueryBus()
