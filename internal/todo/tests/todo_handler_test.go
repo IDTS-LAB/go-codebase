@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -275,4 +276,373 @@ func TestSearchTodos_MissingQuery(t *testing.T) {
 	assert.False(t, resp["success"].(bool))
 	assert.Nil(t, resp["data"])
 	assert.Equal(t, "VALIDATION_ERROR", resp["error"].(map[string]interface{})["code"])
+}
+
+func TestGetTodo_InvalidID(t *testing.T) {
+	h, _ := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/todos/not-a-uuid", nil)
+	rr := httptest.NewRecorder()
+	req = withChiContext(req, map[string]string{"id": "not-a-uuid"})
+
+	h.GetTodo(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+}
+
+func TestListTodos_Success(t *testing.T) {
+	h, repo := setupHandler(t)
+
+	id := uuid.New()
+	todos := []*entity.Todo{newTestTodo(id, "Test")}
+	repo.On("GetAll", mock.Anything, (*string)(nil), 20).Return(todos, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/todos", nil)
+	rr := httptest.NewRecorder()
+
+	h.ListTodos(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.True(t, resp["success"].(bool))
+	assert.NotNil(t, resp["data"])
+	assert.NotNil(t, resp["meta"])
+	repo.AssertExpectations(t)
+}
+
+func TestListTodos_WithCursor(t *testing.T) {
+	h, repo := setupHandler(t)
+
+	cursor := "next-cursor"
+	todos := []*entity.Todo{}
+	repo.On("GetAll", mock.Anything, &cursor, 10).Return(todos, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/todos?cursor=next-cursor&limit=10", nil)
+	rr := httptest.NewRecorder()
+
+	h.ListTodos(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	repo.AssertExpectations(t)
+}
+
+func TestListTodos_RepoError(t *testing.T) {
+	h, repo := setupHandler(t)
+
+	repo.On("GetAll", mock.Anything, (*string)(nil), 20).Return([]*entity.Todo{}, service.ErrTodoNotFound)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/todos", nil)
+	rr := httptest.NewRecorder()
+
+	h.ListTodos(rr, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	repo.AssertExpectations(t)
+}
+
+func TestUpdateTodo_Success(t *testing.T) {
+	h, repo := setupHandler(t)
+
+	id := uuid.New()
+	todo := newTestTodoWithDesc(id, "Updated Title", "Updated Desc")
+	repo.On("GetByID", mock.Anything, id).Return(todo, nil)
+	repo.On("Update", mock.Anything, mock.Anything).Return(nil)
+
+	body, _ := json.Marshal(dto.UpdateTodoRequest{Title: "Updated Title", Description: "Updated Desc"})
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/todos/"+id.String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	req = withChiContext(req, map[string]string{"id": id.String()})
+
+	h.UpdateTodo(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.True(t, resp["success"].(bool))
+	assert.NotNil(t, resp["data"])
+	assert.Nil(t, resp["meta"])
+	repo.AssertExpectations(t)
+}
+
+func TestUpdateTodo_InvalidID(t *testing.T) {
+	h, _ := setupHandler(t)
+
+	body, _ := json.Marshal(dto.UpdateTodoRequest{Title: "Updated Title"})
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/todos/not-a-uuid", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	req = withChiContext(req, map[string]string{"id": "not-a-uuid"})
+
+	h.UpdateTodo(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+}
+
+func TestUpdateTodo_BadJSON(t *testing.T) {
+	h, _ := setupHandler(t)
+
+	id := uuid.New()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/todos/"+id.String(), bytes.NewReader([]byte("{not json")))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	req = withChiContext(req, map[string]string{"id": id.String()})
+
+	h.UpdateTodo(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+}
+
+func TestUpdateTodo_NotFound(t *testing.T) {
+	h, repo := setupHandler(t)
+
+	id := uuid.New()
+	repo.On("GetByID", mock.Anything, id).Return(nil, service.ErrTodoNotFound)
+
+	body, _ := json.Marshal(dto.UpdateTodoRequest{Title: "Updated Title"})
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/todos/"+id.String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	req = withChiContext(req, map[string]string{"id": id.String()})
+
+	h.UpdateTodo(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	assert.Equal(t, "NOT_FOUND", resp["error"].(map[string]interface{})["code"])
+	repo.AssertExpectations(t)
+}
+
+func TestDeleteTodo_InvalidID(t *testing.T) {
+	h, _ := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/todos/not-a-uuid", nil)
+	rr := httptest.NewRecorder()
+	req = withChiContext(req, map[string]string{"id": "not-a-uuid"})
+
+	h.DeleteTodo(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+}
+
+func TestDeleteTodo_NotFound(t *testing.T) {
+	h, repo := setupHandler(t)
+
+	id := uuid.New()
+	repo.On("GetByID", mock.Anything, id).Return(nil, service.ErrTodoNotFound)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/todos/"+id.String(), nil)
+	rr := httptest.NewRecorder()
+	req = withChiContext(req, map[string]string{"id": id.String()})
+
+	h.DeleteTodo(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	assert.Equal(t, "NOT_FOUND", resp["error"].(map[string]interface{})["code"])
+	repo.AssertExpectations(t)
+}
+
+func TestCompleteTodo_NotFound(t *testing.T) {
+	h, repo := setupHandler(t)
+
+	id := uuid.New()
+	repo.On("GetByID", mock.Anything, id).Return(nil, service.ErrTodoNotFound)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/todos/"+id.String()+"/complete", nil)
+	rr := httptest.NewRecorder()
+	req = withChiContext(req, map[string]string{"id": id.String()})
+
+	h.CompleteTodo(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	assert.Equal(t, "NOT_FOUND", resp["error"].(map[string]interface{})["code"])
+	repo.AssertExpectations(t)
+}
+
+func TestCompleteTodo_InvalidID(t *testing.T) {
+	h, _ := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/todos/not-a-uuid/complete", nil)
+	rr := httptest.NewRecorder()
+	req = withChiContext(req, map[string]string{"id": "not-a-uuid"})
+
+	h.CompleteTodo(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+}
+
+func TestCreateTodo_BadJSON(t *testing.T) {
+	h, _ := setupHandler(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/todos", bytes.NewReader([]byte("{invalid")))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	h.CreateTodo(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+}
+
+func TestCreateTodo_RepoError(t *testing.T) {
+	h, repo := setupHandler(t)
+
+	body, _ := json.Marshal(dto.CreateTodoRequest{Title: "Buy milk", Description: "2%"})
+	repo.On("Create", mock.Anything, mock.Anything).Return(errors.New("db error"))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/todos", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	h.CreateTodo(rr, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	repo.AssertExpectations(t)
+}
+
+func TestGetTodo_RepoError(t *testing.T) {
+	h, repo := setupHandler(t)
+
+	id := uuid.New()
+	repo.On("GetByID", mock.Anything, id).Return(nil, errors.New("db error"))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/todos/"+id.String(), nil)
+	rr := httptest.NewRecorder()
+	req = withChiContext(req, map[string]string{"id": id.String()})
+
+	h.GetTodo(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	assert.Equal(t, "NOT_FOUND", resp["error"].(map[string]interface{})["code"])
+	repo.AssertExpectations(t)
+}
+
+func TestUpdateTodo_RepoError(t *testing.T) {
+	h, repo := setupHandler(t)
+
+	id := uuid.New()
+	repo.On("GetByID", mock.Anything, id).Return(nil, errors.New("db error"))
+
+	body, _ := json.Marshal(dto.UpdateTodoRequest{Title: "Updated Title"})
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/todos/"+id.String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	req = withChiContext(req, map[string]string{"id": id.String()})
+
+	h.UpdateTodo(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	assert.Equal(t, "NOT_FOUND", resp["error"].(map[string]interface{})["code"])
+	repo.AssertExpectations(t)
+}
+
+func TestDeleteTodo_RepoError(t *testing.T) {
+	h, repo := setupHandler(t)
+
+	id := uuid.New()
+	repo.On("GetByID", mock.Anything, id).Return(nil, errors.New("db error"))
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/todos/"+id.String(), nil)
+	rr := httptest.NewRecorder()
+	req = withChiContext(req, map[string]string{"id": id.String()})
+
+	h.DeleteTodo(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	assert.Equal(t, "NOT_FOUND", resp["error"].(map[string]interface{})["code"])
+	repo.AssertExpectations(t)
+}
+
+func TestCompleteTodo_RepoError(t *testing.T) {
+	h, repo := setupHandler(t)
+
+	id := uuid.New()
+	repo.On("GetByID", mock.Anything, id).Return(nil, errors.New("db error"))
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/todos/"+id.String()+"/complete", nil)
+	rr := httptest.NewRecorder()
+	req = withChiContext(req, map[string]string{"id": id.String()})
+
+	h.CompleteTodo(rr, req)
+
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	assert.Equal(t, "NOT_FOUND", resp["error"].(map[string]interface{})["code"])
+	repo.AssertExpectations(t)
+}
+
+func TestSearchTodos_RepoError(t *testing.T) {
+	h, repo := setupHandler(t)
+
+	repo.On("Search", mock.Anything, "test", (*string)(nil), 20).Return([]*entity.Todo{}, errors.New("db error"))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/todos/search?q=test", nil)
+	rr := httptest.NewRecorder()
+
+	h.SearchTodos(rr, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	var resp map[string]interface{}
+	json.NewDecoder(rr.Body).Decode(&resp)
+	assert.False(t, resp["success"].(bool))
+	assert.Nil(t, resp["data"])
+	repo.AssertExpectations(t)
 }

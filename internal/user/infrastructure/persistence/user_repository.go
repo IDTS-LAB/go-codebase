@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lib/pq"
+
 	"github.com/IDTS-LAB/go-codebase/internal/authentication/domain/entity"
 	"github.com/IDTS-LAB/go-codebase/internal/core/domain"
 	"github.com/IDTS-LAB/go-codebase/internal/shared/cursor"
@@ -102,7 +104,7 @@ func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Use
 	q := sqlc.New(r.db)
 	row, err := q.GetUserByID(ctx, id)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("user not found")
+		return nil, fmt.Errorf("user not found: %w", domain.ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get user: %w", err)
@@ -119,6 +121,20 @@ func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Use
 	return u, nil
 }
 
+func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO users (id, email, name, is_active, email_verified_at, created_at, updated_at, password)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, ''::varchar)
+	`, user.ID, user.Email, user.Name, user.IsActive, nil, user.CreatedAt, user.UpdatedAt)
+	if err != nil {
+		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+			return fmt.Errorf("create user: %w", domain.ErrAlreadyExists)
+		}
+		return fmt.Errorf("create user: %w", err)
+	}
+	return nil
+}
+
 func (r *userRepository) Update(ctx context.Context, user *entity.User) error {
 	q := sqlc.New(r.db)
 	rows, err := q.UpdateUser(ctx, sqlc.UpdateUserParams{
@@ -132,7 +148,7 @@ func (r *userRepository) Update(ctx context.Context, user *entity.User) error {
 		return fmt.Errorf("update user: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("user not found")
+		return fmt.Errorf("user not found: %w", domain.ErrNotFound)
 	}
 	return nil
 }
@@ -144,7 +160,7 @@ func (r *userRepository) Delete(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("delete user: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("user not found")
+		return fmt.Errorf("user not found: %w", domain.ErrNotFound)
 	}
 	return nil
 }

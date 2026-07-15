@@ -29,6 +29,7 @@ func registerHandlers(
 	repo repository.UserRepository,
 	roleProvider roleProvider.AuthorizationProvider,
 ) {
+	commandBus.Register(command.CreateUserCommand{}, command.NewCreateUserHandler(repo))
 	commandBus.Register(command.UpdateUserCommand{}, command.NewUpdateUserHandler(repo))
 	commandBus.Register(command.DeleteUserCommand{}, command.NewDeleteUserHandler(repo))
 

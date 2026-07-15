@@ -13,6 +13,10 @@ func NewRouter(handler *Handler, authMiddleware func(http.Handler) http.Handler,
 	r.Group(func(r chi.Router) {
 		r.Use(authMiddleware)
 		r.Group(func(r chi.Router) {
+			r.Use(middleware.Authorization(authorizer, "user", "create"))
+			r.Post("/", handler.Create)
+		})
+		r.Group(func(r chi.Router) {
 			r.Use(middleware.Authorization(authorizer, "user", "read"))
 			r.Get("/me", handler.Me)
 			r.Get("/", handler.List)

@@ -1,4 +1,4 @@
-.PHONY: run build test lint fmt migrate-up migrate-down sqlc swagger docker-up docker-down docker-dev docker-dev-down clean rename install-tools precommit install-hooks
+.PHONY: run build test test-unit test-integration lint fmt migrate-up migrate-down sqlc swagger docker-up docker-down docker-dev docker-dev-down clean rename install-tools precommit install-hooks
 
 APP_NAME := go-codebase
 BUILD_DIR := bin
@@ -36,6 +36,12 @@ build:
 
 test:
 	go test -v -count=1 ./...
+
+test-unit:
+	go test -v -count=1 $(shell go list ./... | grep -v /tests/)
+
+test-integration:
+	go test -v -count=1 $(shell go list ./... | grep /tests/)
 
 test-coverage:
 	go test -v -count=1 -coverprofile=coverage.out ./...
