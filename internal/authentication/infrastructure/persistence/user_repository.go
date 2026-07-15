@@ -76,9 +76,9 @@ func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
 	}
 
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO users (id, email, name, is_active, email_verified_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, user.ID, user.Email, user.Name, user.IsActive, ptrToNullTime(emailVerifiedAt), user.CreatedAt, user.UpdatedAt)
+		INSERT INTO users (id, email, name, is_active, email_verified_at, created_at, updated_at, password)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, user.ID, user.Email, user.Name, user.IsActive, ptrToNullTime(emailVerifiedAt), user.CreatedAt, user.UpdatedAt, user.Password)
 	if err != nil {
 		return fmt.Errorf("insert user: %w", err)
 	}

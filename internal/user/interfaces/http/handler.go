@@ -36,6 +36,12 @@ type UserResponse struct {
 	UpdatedAt string   `json:"updated_at"`
 }
 
+type CreateUserRequest struct {
+	Email    string `json:"email" validate:"required,email"`
+	Name     string `json:"name" validate:"required"`
+	IsActive bool   `json:"is_active"`
+}
+
 type UpdateUserRequest struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
@@ -96,6 +102,38 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.RespondCursorPaginated(w, usersResp, result.NextCursor, result.PrevCursor, result.HasNext, result.HasPrev, result.Limit)
+}
+
+// Create godoc
+// @Summary Create a user
+// @Description Create a new user
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param request body CreateUserRequest true "User to create"
+// @Success 201 {object} utils.APIResponse{data=UserResponse}
+// @Failure 400 {object} utils.APIResponse
+// @Failure 409 {object} utils.APIResponse
+// @Security BearerAuth
+// @Router /users [post]
+func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
+	var req CreateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.RespondBadRequest(w, "invalid request body")
+		return
+	}
+
+	resp, err := h.commandBus.Dispatch(r.Context(), command.CreateUserCommand{
+		Email:    req.Email,
+		Name:     req.Name,
+		IsActive: req.IsActive,
+	})
+	if err != nil {
+		utils.Handle(w, r, nil, err)
+		return
+	}
+
+	utils.HandleCreated(w, r, userToResponse(resp.(*authEntity.User)), nil)
 }
 
 // Get godoc

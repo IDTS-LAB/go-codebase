@@ -94,6 +94,24 @@ func TestCreateRole(t *testing.T) {
 		resp := responseMap(t, w)
 		assert.False(t, resp["success"].(bool))
 	})
+
+	t.Run("bus error", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		cmdBus.Register(command.CreateRoleCommand{}, &mockHandler{err: errors.New("db error")})
+
+		body, _ := json.Marshal(dto.CreateRoleRequest{Name: "admin", Description: "Administrator"})
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/roles", bytes.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+
+		h.CreateRole(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
 }
 
 func TestListRoles(t *testing.T) {
@@ -176,6 +194,24 @@ func TestGetRole(t *testing.T) {
 		h.GetRole(w, r)
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("bus error", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		roleID := uuid.New()
+		qBus.Register(query.GetRoleQuery{}, &mockHandler{err: errors.New("db error")})
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/roles/"+roleID.String(), nil)
+		r = withChiParams(r, map[string]string{"id": roleID.String()})
+
+		h.GetRole(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 }
 
@@ -276,6 +312,26 @@ func TestCreatePermission(t *testing.T) {
 		resp := responseMap(t, w)
 		assert.False(t, resp["success"].(bool))
 	})
+
+	t.Run("bus error", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		cmdBus.Register(command.CreatePermissionCommand{}, &mockHandler{err: errors.New("db error")})
+
+		body, _ := json.Marshal(dto.CreatePermissionRequest{
+			Name: "read", Description: "Read users", Resource: "users", Action: "read",
+		})
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/permissions", bytes.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+
+		h.CreatePermission(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
 }
 
 func TestListPermissions(t *testing.T) {
@@ -346,6 +402,24 @@ func TestGetPermission(t *testing.T) {
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
+
+	t.Run("bus error", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		permID := uuid.New()
+		qBus.Register(query.GetPermissionQuery{}, &mockHandler{err: errors.New("db error")})
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/permissions/"+permID.String(), nil)
+		r = withChiParams(r, map[string]string{"id": permID.String()})
+
+		h.GetPermission(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
 }
 
 func TestUpdatePermission(t *testing.T) {
@@ -377,6 +451,28 @@ func TestUpdatePermission(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
+	})
+
+	t.Run("bus error", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		permID := uuid.New()
+		cmdBus.Register(command.UpdatePermissionCommand{}, &mockHandler{err: errors.New("db error")})
+
+		body, _ := json.Marshal(dto.UpdatePermissionRequest{
+			Name: "write", Description: "Write users", Resource: "users", Action: "write",
+		})
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPut, "/permissions/"+permID.String(), bytes.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+		r = withChiParams(r, map[string]string{"id": permID.String()})
+
+		h.UpdatePermission(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 }
 
@@ -439,6 +535,24 @@ func TestAssignRole(t *testing.T) {
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
+
+	t.Run("bus error", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		cmdBus.Register(command.AssignRoleCommand{}, &mockHandler{err: errors.New("db error")})
+
+		body, _ := json.Marshal(dto.AssignRoleRequest{UserID: uuid.New(), RoleID: uuid.New()})
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/users/"+uuid.New().String()+"/roles", bytes.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+
+		h.AssignRole(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
 }
 
 func TestRemoveRole(t *testing.T) {
@@ -462,6 +576,25 @@ func TestRemoveRole(t *testing.T) {
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
 	})
+
+	t.Run("bus error", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		userID := uuid.New()
+		roleID := uuid.New()
+		cmdBus.Register(command.UnassignRoleCommand{}, &mockHandler{err: errors.New("db error")})
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodDelete, "/users/"+userID.String()+"/roles/"+roleID.String(), nil)
+		r = withChiParams(r, map[string]string{"userId": userID.String(), "roleId": roleID.String()})
+
+		h.RemoveRole(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
 }
 
 func TestGetUserRoles(t *testing.T) {
@@ -484,6 +617,24 @@ func TestGetUserRoles(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
+	})
+
+	t.Run("bus error", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		userID := uuid.New()
+		qBus.Register(query.GetUserRolesQuery{}, &mockHandler{err: errors.New("db error")})
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/users/"+userID.String()+"/roles", nil)
+		r = withChiParams(r, map[string]string{"userId": userID.String()})
+
+		h.GetUserRoles(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 }
 
@@ -524,6 +675,24 @@ func TestAssignPermission(t *testing.T) {
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
+
+	t.Run("bus error", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		cmdBus.Register(command.AssignPermissionCommand{}, &mockHandler{err: errors.New("db error")})
+
+		body, _ := json.Marshal(dto.AssignPermissionRequest{RoleID: uuid.New(), PermissionID: uuid.New()})
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/roles/"+uuid.New().String()+"/permissions", bytes.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+
+		h.AssignPermission(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
 }
 
 func TestRemovePermission(t *testing.T) {
@@ -547,6 +716,25 @@ func TestRemovePermission(t *testing.T) {
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
 	})
+
+	t.Run("bus error", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		roleID := uuid.New()
+		permID := uuid.New()
+		cmdBus.Register(command.UnassignPermissionCommand{}, &mockHandler{err: errors.New("db error")})
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodDelete, "/roles/"+roleID.String()+"/permissions/"+permID.String(), nil)
+		r = withChiParams(r, map[string]string{"roleId": roleID.String(), "permissionId": permID.String()})
+
+		h.RemovePermission(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
 }
 
 func TestGetRolePermissions(t *testing.T) {
@@ -569,6 +757,24 @@ func TestGetRolePermissions(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		resp := responseMap(t, w)
 		assert.True(t, resp["success"].(bool))
+	})
+
+	t.Run("bus error", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		roleID := uuid.New()
+		qBus.Register(query.GetRolePermissionsQuery{}, &mockHandler{err: errors.New("db error")})
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/roles/"+roleID.String()+"/permissions", nil)
+		r = withChiParams(r, map[string]string{"roleId": roleID.String()})
+
+		h.GetRolePermissions(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 }
 
@@ -626,6 +832,26 @@ func TestCheckPermission(t *testing.T) {
 		h.CheckPermission(w, r)
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("bus error", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		userID := uuid.New()
+		qBus.Register(query.CheckPermissionQuery{}, &mockHandler{err: errors.New("db error")})
+
+		body, _ := json.Marshal(dto.CheckPermissionRequest{Resource: "users", Action: "read"})
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/check-permission", bytes.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+		r = withUserID(r, userID)
+
+		h.CheckPermission(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 }
 
@@ -692,6 +918,250 @@ func TestHandlerErrors(t *testing.T) {
 		r = withChiParams(r, map[string]string{"id": roleID.String()})
 
 		h.DeleteRole(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	t.Run("delete role invalid UUID", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodDelete, "/roles/invalid", nil)
+		r = withChiParams(r, map[string]string{"id": "invalid"})
+
+		h.DeleteRole(w, r)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("update role not found", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		roleID := uuid.New()
+		cmdBus.Register(command.UpdateRoleCommand{}, &mockHandler{err: errors.New("not found")})
+
+		body, _ := json.Marshal(dto.UpdateRoleRequest{Name: "admin"})
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPut, "/roles/"+roleID.String(), bytes.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+		r = withChiParams(r, map[string]string{"id": roleID.String()})
+
+		h.UpdateRole(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+
+
+	t.Run("create permission bad JSON", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/permissions", bytes.NewReader([]byte(`{invalid json`)))
+		r.Header.Set("Content-Type", "application/json")
+
+		h.CreatePermission(w, r)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("update permission invalid UUID", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPut, "/permissions/invalid", bytes.NewReader([]byte(`{"name":"read"}`)))
+		r.Header.Set("Content-Type", "application/json")
+		r = withChiParams(r, map[string]string{"id": "invalid"})
+
+		h.UpdatePermission(w, r)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("update permission bad JSON", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		permID := uuid.New()
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPut, "/permissions/"+permID.String(), bytes.NewReader([]byte(`{invalid}`)))
+		r.Header.Set("Content-Type", "application/json")
+		r = withChiParams(r, map[string]string{"id": permID.String()})
+
+		h.UpdatePermission(w, r)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("delete permission invalid UUID", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodDelete, "/permissions/invalid", nil)
+		r = withChiParams(r, map[string]string{"id": "invalid"})
+
+		h.DeletePermission(w, r)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("delete permission error", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		permID := uuid.New()
+		cmdBus.Register(command.DeletePermissionCommand{}, &mockHandler{err: errors.New("db error")})
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodDelete, "/permissions/"+permID.String(), nil)
+		r = withChiParams(r, map[string]string{"id": permID.String()})
+
+		h.DeletePermission(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	t.Run("remove role invalid user ID", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		roleID := uuid.New()
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodDelete, "/users/invalid/roles/"+roleID.String(), nil)
+		r = withChiParams(r, map[string]string{"userId": "invalid", "roleId": roleID.String()})
+
+		h.RemoveRole(w, r)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("remove role invalid role ID", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		userID := uuid.New()
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodDelete, "/users/"+userID.String()+"/roles/invalid", nil)
+		r = withChiParams(r, map[string]string{"userId": userID.String(), "roleId": "invalid"})
+
+		h.RemoveRole(w, r)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("get user roles invalid user ID", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/users/invalid/roles", nil)
+		r = withChiParams(r, map[string]string{"userId": "invalid"})
+
+		h.GetUserRoles(w, r)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("remove permission invalid role ID", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		permID := uuid.New()
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodDelete, "/roles/invalid/permissions/"+permID.String(), nil)
+		r = withChiParams(r, map[string]string{"roleId": "invalid", "permissionId": permID.String()})
+
+		h.RemovePermission(w, r)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("remove permission invalid permission ID", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		roleID := uuid.New()
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodDelete, "/roles/"+roleID.String()+"/permissions/invalid", nil)
+		r = withChiParams(r, map[string]string{"roleId": roleID.String(), "permissionId": "invalid"})
+
+		h.RemovePermission(w, r)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("get role permissions invalid role ID", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/roles/invalid/permissions", nil)
+		r = withChiParams(r, map[string]string{"roleId": "invalid"})
+
+		h.GetRolePermissions(w, r)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("list roles error", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		qBus.Register(query.ListRolesQuery{}, &mockHandler{err: errors.New("db error")})
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/roles", nil)
+
+		h.ListRoles(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	t.Run("list permissions error", func(t *testing.T) {
+		cmdBus := cqrs.NewInMemoryCommandBus()
+		qBus := cqrs.NewInMemoryQueryBus()
+		v := validator.New()
+		h := NewHandler(cmdBus, qBus, v)
+
+		qBus.Register(query.ListPermissionsQuery{}, &mockHandler{err: errors.New("db error")})
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/permissions", nil)
+
+		h.ListPermissions(w, r)
 
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
